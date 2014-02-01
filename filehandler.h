@@ -25,17 +25,21 @@ public:
 	void open(const std::string &, std::vector<std::string> &, std::stack<std::string> &);
 	std::vector<std::string> getFiles();
 	size_type getFileNumbers();
-	std::vector<std::string> getExtension(std::string );
-	bool isDirectory(std::string);
+	std::vector<std::string> getExtension(const std::string &);
+	bool isDirectory(const std::string &);
 	bool is_open();
-	void setFilename(std::string);
+	void setFilename(const std::string &);
+	std::vector<std::string>::iterator begin();
+	std::vector<std::string>::iterator end();
+	operator bool() const;
 	
-	bool isFile(std::string fileName);
+	bool isFile(const std::string &);
 private:
+    bool okay;
     std::vector<std::string> allFiles;
     std::stack<std::string> directories;
 	std::string filename;
-	char stringToChar(std::string);
+	char stringToChar(const std::string &);
 };
 
 #endif
