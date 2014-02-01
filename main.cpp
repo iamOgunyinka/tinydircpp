@@ -9,12 +9,13 @@ int main()
 	
 	if(a.is_open()){ //explicitly requesting if it is "openable"
 		a.recurseAll(); //get all Filenames down the "tree"
-		vec = a.getExtension("cc");  //automatically prefix with a '.', return vector of strings
+		vec = a.getExtension("cc");  //automatically prefix with a '.', return std::vector of strings
 		for(const auto &i: vec){
 			std::cout << i << std::endl;
 		}
 	} else {
 		std::cout << "Unable to open directory/file" << std::endl;
+		//You may choose to EXIT_FAILURE
 	}
 	
 	std::cout << "Changing directory to \"C:\\New\\FilePath\"" << std::endl;
