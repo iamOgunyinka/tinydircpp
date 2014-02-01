@@ -1,9 +1,12 @@
 #include "filehandler.h"
 
-FileHandler::FileHandler(const std::string &_filename): filename(_filename)
+FileHandler::FileHandler(const std::string &_filename): okay(false), filename(_filename)
 {
 	while(filename[filename.size()-1] == stringToChar(SLASH)){
 		filename.erase((filename.rbegin() + 1).base(), filename.end());
+	}
+	if(is_open()){
+		okay = false;
 	}
 }
 
@@ -11,17 +14,23 @@ bool FileHandler::is_open()
 {
 	tinydir_dir dir;
 	int isOpen = tinydir_open(&dir, filename);
-	if(isOpen !=0) return false;
+	if(isOpen !=0){
+		tinydir_close(&dir);
+		return false;
+	}
+	tinydir_close(&dir);
 	return true;
 }
 
-void FileHandler::setFilename(std::string new_file)
+void FileHandler::setFilename(const std::string &new_file)
 {
 	filename = new_file;
+	okay = false;
 	allFiles.clear();
 	while(!directories.empty()){
 		directories.pop();
 	}
+	if(is_open()) okay = true;
 }
 
 void FileHandler::recurseAll(){
@@ -75,13 +84,14 @@ inline FileHandler::size_type FileHandler::getFileNumbers(){
 	return allFiles.size();
 }
 
-inline char FileHandler::stringToChar(std::string s){
+inline char FileHandler::stringToChar(const std::string &s){
 	char c = s[0];
 	return c;
 }
 
-std::vector<std::string> FileHandler::getExtension(std::string ext)
+std::vector<std::string> FileHandler::getExtension(const std::string &_ext)
 {
+	std::string ext { _ext};
 	if(ext[0] != '.'){
 		ext.insert(ext.begin(), '.');
 	}
@@ -92,7 +102,7 @@ std::vector<std::string> FileHandler::getExtension(std::string ext)
 	return temp;
 }
 
-bool FileHandler::isDirectory(std::string fileName)
+bool FileHandler::isDirectory(const std::string &fileName)
 {
 	tinydir_dir dir;
 	tinydir_open(&dir, fileName.c_str());
@@ -105,4 +115,16 @@ bool FileHandler::isDirectory(std::string fileName)
 	}
 	tinydir_close(&dir);
 	return false;
+}
+
+std::vector<std::string>::iterator FileHandler::begin() {
+	return allFiles.begin();
+}
+
+std::vector<std::string>::iterator FileHandler::end() {
+	return allFiles.end();
+}
+
+FileHandler::operator bool() const{
+	return okay;
 }
