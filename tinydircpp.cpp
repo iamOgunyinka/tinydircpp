@@ -40,6 +40,8 @@ namespace tinydir
         return std::tie(a.path, a.name) == std::tie(b.path, b.name);
     }
 
+    // TODO group logic inside NativeImpl too
+    // so that there is less of `->` going on and generally less of `#ifdef`
 #ifdef _WIN32
     struct directory::NativeImpl
     {
