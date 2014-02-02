@@ -1,16 +1,14 @@
 #include "filehandler.h"
 
-FileHandler::FileHandler(const std::string &_filename): okay(false), filename(_filename)
+Folder::Folder(const std::string &_filename): okay{false}, filename{_filename}
 {
-	while(filename[filename.size()-1] == stringToChar(SLASH)){
-		filename.erase((filename.rbegin() + 1).base(), filename.end());
-	}
+	removeSlashFrom(filename);
 	if(is_open()){
 		okay = true;
 	}
 }
 
-bool FileHandler::is_open()
+bool Folder::is_open()
 {
 	tinydir_dir dir;
 	int isOpen = tinydir_open(&dir, filename);
@@ -22,9 +20,10 @@ bool FileHandler::is_open()
 	return true;
 }
 
-void FileHandler::setFilename(const std::string &new_file)
+void Folder::setFilename(const std::string &new_file)
 {
 	filename = new_file;
+	removeSlashFrom(filename);
 	okay = false;
 	allFiles.clear();
 	while(!directories.empty()){
@@ -33,7 +32,7 @@ void FileHandler::setFilename(const std::string &new_file)
 	if(is_open()) okay = true;
 }
 
-void FileHandler::recurseAll(){
+void Folder::recurseDownDirectory(){
 	do
 	{
 		std::string newpath { filename };
@@ -45,11 +44,11 @@ void FileHandler::recurseAll(){
 	} while(!directories.empty());
 }
 
-inline void FileHandler::getSingle(){
+inline void Folder::getSingle(){
 	open(filename, allFiles, directories);
 }
 
-void FileHandler::open(const std::string &source, std::vector<std::string> &vec, std::stack<std::string> &stack)
+void Folder::open(const std::string &source, std::vector<std::string> &vec, std::stack<std::string> &stack)
 {
 	tinydir_dir dir;
 	std::string stack_string { };
@@ -76,33 +75,32 @@ void FileHandler::open(const std::string &source, std::vector<std::string> &vec,
 	tinydir_close(&dir);
 }
 
-inline std::vector<std::string> FileHandler::getFiles(){
+inline std::vector<std::string> Folder::getFiles(){
 	return allFiles;
 }
 
-inline FileHandler::size_type FileHandler::getFileNumbers(){
+inline Folder::size_type Folder::getNumberOfFiles(){
 	return allFiles.size();
 }
 
-inline char FileHandler::stringToChar(const std::string &s){
+inline char Folder::stringToChar(const std::string &s){
 	char c = s[0];
 	return c;
 }
 
-std::vector<std::string> FileHandler::getExtension(const std::string &_ext)
+std::vector<std::string> Folder::getExtension(const std::string &_ext)
 {
 	std::string ext { _ext};
 	if(ext[0] != '.'){
 		ext.insert(ext.begin(), '.');
 	}
 	std::vector<std::string> temp(allFiles.cbegin(), allFiles.cend());
-	auto partition = std::stable_partition(temp.begin(), temp.end(),
-			[=](std::string s)->bool{ return s.find(ext) != std::string::npos; } );
-	temp.erase(partition, temp.end());
+	std::remove_if(temp.begin(), temp.end(), 
+	        [=](const std::string &s)->bool{ return s.find(ext) != std::string::npos; } );
 	return temp;
 }
 
-bool FileHandler::isDirectory(const std::string &fileName)
+bool Folder::isDirectory(const std::string &fileName)
 {
 	tinydir_dir dir;
 	tinydir_open(&dir, fileName.c_str());
@@ -117,14 +115,23 @@ bool FileHandler::isDirectory(const std::string &fileName)
 	return false;
 }
 
-std::vector<std::string>::iterator FileHandler::begin() {
+std::vector<std::string>::iterator Folder::begin() {
 	return allFiles.begin();
 }
 
-std::vector<std::string>::iterator FileHandler::end() {
+std::vector<std::string>::iterator Folder::end() {
 	return allFiles.end();
 }
 
-FileHandler::operator bool() const{
+Folder::operator bool() const{
 	return okay;
+}
+
+void Folder::removeSlashFrom(std::string const &filepath)
+{
+	if(filepath.size() > 0){
+		while(filename[filename.size()-1] == stringToChar(SLASH)){
+			filename.erase((filename.rbegin() + 1).base(), filename.end());
+		}
+	}
 }
