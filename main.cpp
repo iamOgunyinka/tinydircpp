@@ -4,26 +4,25 @@
 int main()
 {
 
-    FileHandler a("/path/to/directory");
+    Folder a("/path/to/folder");
 	std::vector<std::string> vec;
 	
-	if(a.is_open()){ //explicitly requesting if it is "openable"
-		a.recurseAll(); //get all Filenames down the "tree"
-		vec = a.getExtension("cc");  //automatically prefix with a '.', return std::vector of strings
+	if(a.is_open()){ //explicitly requesting if is "openable"
+		a.recurseDownDirectory(); //get all Filenames down the "tree"
+		vec = a.getExtension("cc");  //automatically prefix with a '.', return vector of strings
 		for(const auto &i: vec){
 			std::cout << i << std::endl;
 		}
 	} else {
 		std::cout << "Unable to open directory/file" << std::endl;
-		//You may choose to EXIT_FAILURE
 	}
-	
+
 	std::cout << "Changing directory to \"C:\\New\\FilePath\"" << std::endl;
 	
-	a.setFilename("C:\\New\\FilePath\\");
+	a.setFilename("C:\\WindowsPathName\\");
 	if(a){
 		a.getSingle(); //get filenames ONLY within the given directory
-		for(const auto &i: a){ //FileHandler objects are iterable
+		for(const auto &i: a){ //Folder objects are iterable
 			std::cout << i << std::endl;
 		}
 	} else {
