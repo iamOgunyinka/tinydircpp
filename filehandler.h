@@ -40,7 +40,7 @@ private:
     std::vector<std::string> allFiles;
     std::stack<std::string> directories;
     std::string filename;
-    void removeSlashFrom(std::string const &filepath);
+    void removeSlashFrom(std::string &filepath);
     char stringToChar(const std::string &);
 };
 
