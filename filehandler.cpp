@@ -1,4 +1,5 @@
 #include "filehandler.h"
+#include <algorithm>
 
 FileHandler::FileHandler(const std::string &_filename): okay(false), filename(_filename)
 {
@@ -12,14 +13,15 @@ FileHandler::FileHandler(const std::string &_filename): okay(false), filename(_f
 
 bool FileHandler::is_open()
 {
-	tinydir_dir dir;
-	int isOpen = tinydir_open(&dir, filename);
-	if(isOpen !=0){
-		tinydir_close(&dir);
-		return false;
-	}
-	tinydir_close(&dir);
-	return true;
+    // TODO fixme: do accessibility check without exceptions for control flow
+    try
+    {
+        tinydir::directory dir(filename);
+        return true;
+    } catch(...)
+    {
+        return false;
+    }
 }
 
 void FileHandler::setFilename(const std::string &new_file)
@@ -45,20 +47,16 @@ void FileHandler::recurseAll(){
 	} while(!directories.empty());
 }
 
-inline void FileHandler::getSingle(){
+void FileHandler::getSingle(){
 	open(filename, allFiles, directories);
 }
 
 void FileHandler::open(const std::string &source, std::vector<std::string> &vec, std::stack<std::string> &stack)
 {
-	tinydir_dir dir;
 	std::string stack_string { };
-	tinydir_open_sorted(&dir, source.c_str());
-	for (unsigned int i = 0; i < dir.n_files; ++i)
+    tinydir::directory dir(source, true);
+	for (auto const& file: dir.files)
 	{
-		tinydir_file file;
-		tinydir_readfile_n(&dir, &file, i);
-
 		if (file.is_dir)
 		{
 			stack_string = source + std::string(SLASH) + file.name;
@@ -73,7 +71,6 @@ void FileHandler::open(const std::string &source, std::vector<std::string> &vec,
 			vec.push_back(source + std::string(SLASH) + file.name);
 		}
 	}
-	tinydir_close(&dir);
 }
 
 inline std::vector<std::string> FileHandler::getFiles(){
@@ -104,17 +101,14 @@ std::vector<std::string> FileHandler::getExtension(const std::string &_ext)
 
 bool FileHandler::isDirectory(const std::string &fileName)
 {
-	tinydir_dir dir;
-	tinydir_open(&dir, fileName.c_str());
-	tinydir_file file { };
-	tinydir_readfile(&dir, &file);
-
-	if (file.is_dir){
-		tinydir_close(&dir);
-		return true;
-	}
-	tinydir_close(&dir);
-	return false;
+    // TODO fixme: do accessibility check without exceptions for control flow
+    try
+    {
+        return tinydir::directory(fileName).has_next;
+    } catch(...)
+    {
+        return false;
+    }
 }
 
 std::vector<std::string>::iterator FileHandler::begin() {
