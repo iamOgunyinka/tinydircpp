@@ -6,7 +6,7 @@ FileHandler::FileHandler(const std::string &_filename): okay(false), filename(_f
 		filename.erase((filename.rbegin() + 1).base(), filename.end());
 	}
 	if(is_open()){
-		okay = false;
+		okay = true;
 	}
 }
 
