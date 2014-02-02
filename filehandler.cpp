@@ -127,11 +127,11 @@ Folder::operator bool() const{
 	return okay;
 }
 
-void Folder::removeSlashFrom(std::string const &filepath)
+void Folder::removeSlashFrom(std::string &filepath)
 {
 	if(filepath.size() > 0){
-		while(filename[filename.size()-1] == stringToChar(SLASH)){
-			filename.erase((filename.rbegin() + 1).base(), filename.end());
+		while(filepath[filepath.size()-1] == stringToChar(SLASH)){
+			filepath.erase((filepath.rbegin() + 1).base(), filepath.end());
 		}
 	}
 }
