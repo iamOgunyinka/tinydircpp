@@ -11,35 +11,36 @@
 #define SLASH "/"
 #endif
 
-class FileHandler
+class Folder
 {
 public:
-	FileHandler(const std::string &);
-	FileHandler& operator=(const FileHandler &) = delete;
-	FileHandler(const FileHandler &) = delete;
-	~FileHandler() { }
+	Folder(const std::string &filepath);
+	Folder& operator=(const Folder &) = delete;
+	Folder(Folder &&);
+	Folder(const Folder &) = delete;
+	~Folder() { }
 
 	typedef std::vector<std::string>::size_type size_type;
-	void recurseAll();
-	void getSingle();
-	void open(const std::string &, std::vector<std::string> &, std::stack<std::string> &);
+	void recurseDownDirectory();
+	void getSingle(); //looking for new API name, getSingle() does not describe its function
+	void open(const std::string &path, std::vector<std::string> &fileContainer, std::stack<std::string> &stackDirectory);
 	std::vector<std::string> getFiles();
-	size_type getFileNumbers();
-	std::vector<std::string> getExtension(const std::string &);
-	bool isDirectory(const std::string &);
+	size_type getNumberOfFiles();
+	std::vector<std::string> getExtension(const std::string &extension);
+	bool isDirectory(const std::string &path_to_directory);
 	bool is_open();
-	void setFilename(const std::string &);
+	void setFilename(const std::string &new_dirpath);
 	std::vector<std::string>::iterator begin();
 	std::vector<std::string>::iterator end();
 	operator bool() const;
 	
-	bool isFile(const std::string &);
+	bool isFile(const std::string &filepath);
 private:
     bool okay;
     std::vector<std::string> allFiles;
     std::stack<std::string> directories;
-	std::string filename;
-	char stringToChar(const std::string &);
+    std::string filename;
+    char stringToChar(const std::string &);
 };
 
 #endif
