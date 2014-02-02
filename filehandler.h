@@ -22,7 +22,7 @@ public:
 
 	typedef std::vector<std::string>::size_type size_type;
 	void recurseDownDirectory();
-	void getSingle(); //looking for new API name, getSingle() does not describe its function
+	void getSingle(); //looking for new API name, getSingle() does not describe what this function does
 	void open(const std::string &path, std::vector<std::string> &fileContainer, std::stack<std::string> &stackDirectory);
 	std::vector<std::string> getFiles();
 	size_type getNumberOfFiles();
@@ -40,6 +40,7 @@ private:
     std::vector<std::string> allFiles;
     std::stack<std::string> directories;
     std::string filename;
+    void removeSlashFrom(std::string const &filepath);
     char stringToChar(const std::string &);
 };
 
