@@ -1,4 +1,4 @@
-#include "filehandler.h"
+#include "filehandler.hpp"
 
 Folder::Folder(const std::string &_filename): okay{false}, filename{_filename}
 {
@@ -6,6 +6,10 @@ Folder::Folder(const std::string &_filename): okay{false}, filename{_filename}
 	if(is_open()){
 		okay = true;
 	}
+}
+
+Folder::Folder( Folder && )
+{
 }
 
 bool Folder::is_open()

@@ -1,7 +1,7 @@
 #ifndef FILEHANDLER_H
 #define FILEHANDLER_H
 
-#include "tinydircpp.h"
+#include "tinydircpp.hpp"
 #include <stack>
 #include <vector>
 
@@ -34,7 +34,6 @@ public:
 	std::vector<std::string>::iterator end();
 	operator bool() const;
 	
-	bool isFile(const std::string &filepath);
 private:
     bool okay;
     std::vector<std::string> allFiles;
