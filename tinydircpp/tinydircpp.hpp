@@ -83,6 +83,7 @@ namespace tinydircpp {
             path relative_path() const;
             path filename() const;
             path extension() const;
+            std::string string() const;
 
             bool empty() const;
             bool has_root_name() const;
@@ -185,8 +186,8 @@ namespace tinydircpp {
         
         void copy( path const & from, path const & to );
         void copy( path const & from, path const & to, std::error_code & ec ) noexcept;
-        void copy( path const & from, path const & to, copy_options options );
-        void copy( path const & from, path const & to, copy_options options, std::error_code & ec ) noexcept;
+        bool copy( path const & from, path const & to, copy_options options );
+        bool copy( path const & from, path const & to, copy_options options, std::error_code & ec ) noexcept;
 
         void copy_file( path const & from, path const & to );
         void copy_file( path const & from, path const & to, std::error_code & ec ) noexcept;

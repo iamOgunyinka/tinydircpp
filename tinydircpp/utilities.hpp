@@ -1,5 +1,7 @@
 #pragma once
 #include <stdexcept>
+#include <WinBase.h>
+#include <chrono>
 
 #ifndef PRIVATE_IMPL
 #define PRIVATE_IMPL
@@ -9,6 +11,14 @@ namespace tinydircpp
 {
     namespace fs {
         class path;
+        enum class filesystem_error_codes
+        {
+            directory_name_unobtainable = 0,
+            unknown_io_error = 0x1,
+            handle_not_opened = 0x2,
+            could_not_obtain_size = 0x3
+
+        };
         namespace details PRIVATE_IMPL {
             struct invalid_filename : public std::runtime_error {
                 invalid_filename( char const * error_message ) : std::runtime_error{ error_message }{}
@@ -16,7 +26,23 @@ namespace tinydircpp
             struct name_too_long : public std::runtime_error {
                 name_too_long( char const * error_message ) : std::runtime_error{ error_message }{}
             };
+
+            std::string get_windows_error( DWORD error_code )
+            {
+                LPTSTR buffer = nullptr;
+                auto length = FormatMessageA( FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, 
+                    nullptr, error_code, MAKELANGID( LANG_NEUTRAL, SUBLANG_DEFAULT ), (LPTSTR)&buffer, 0, 
+                    nullptr );
+                if ( length == 0 || buffer == nullptr ) { // there was an issue getting the error message from the system
+                    return{};
+                }
+                std::string const message{ buffer };
+                LocalFree( buffer );
+                return message;
+            }
         }
+        using file_time_type = std::chrono::time_point<std::chrono::system_clock>;
+
         class filesystem_error : public std::system_error {
         public:
             filesystem_error( std::string const & what, std::error_code ec ) : filesystem_error{ what, {}, ec }{}
@@ -88,5 +114,13 @@ namespace tinydircpp
         add_bits = 1,
         remove_bits = 2,
         follow_symlinks = 4
+    };
+}
+
+namespace std
+{
+    template<>
+    struct is_error_code_enum<tinydircpp::fs::filesystem_error_codes>: public true_type
+    {
     };
 }
