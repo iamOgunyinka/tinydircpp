@@ -18,18 +18,12 @@
     <ClCompile Include="tinydircpp.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="filehandler.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="tests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="tinydircpp.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="filehandler.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="utilities.hpp">

@@ -48,7 +48,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define SLASH "/"
 #endif
 
-constexpr unsigned int TINYDIR_PATH_MAX = 4096;
+constexpr unsigned int TINYDIR_PATH_MAX = 512;
 #ifdef _WIN32
 constexpr unsigned int TINYDIR_PATH_EXTRA = 2;
 #else
@@ -59,42 +59,6 @@ constexpr unsigned int TINYDIR_FILENAME_MAX = 256;
 namespace tinydircpp {
     namespace fs
     {
-        class path {
-        public:
-            path() : path( "" ) {}
-            explicit path( std::string const & pathname ): pathname_{ pathname }{}
-            constexpr explicit path( char const * pathname ) : pathname_{ pathname } {}
-            path( path const & name ): pathname_{ name.pathname_ }{}
-            ~path() = default;
-            path& operator/=( path const & p );
-            path& append( std::string const & str );
-            path& append( path const & p );
-            path& operator +=( std::string const & str );
-            path& operator+=( path const & p );
-            path& operator+=( char p );
-            void clear() noexcept;
-            path& remove_filename();
-            path& replace_filename_with( path const & new_filename );
-            path& replace_extension( path const & );
-            int compare( path const & ) const noexcept;
-            int compare( std::string const & ) const noexcept;
-            path root_name() const;
-            path root_directory() const;
-            path relative_path() const;
-            path filename() const;
-            path extension() const;
-            std::string string() const;
-
-            bool empty() const;
-            bool has_root_name() const;
-            bool has_root_directory() const;
-            bool has_filename() const;
-            bool is_absolute() const;
-            bool is_relative() const;
-        private:
-            std::string pathname_;
-        };
-
         class file_status {
         public:
             explicit file_status( file_type ft = file_type::none, perms permission = perms::none ) noexcept;
@@ -283,10 +247,10 @@ namespace tinydircpp {
         
         void resize_file( path const & p, std::uintmax_t new_size );
         void resize_file( path const & p, std::uintmax_t new_size, std::error_code & ec ) noexcept;
-
+        
         space_info space( path const &p );
         space_info space( path const &p, std::error_code & ec ) noexcept;
-
+        
         file_status status( path const & p );
         file_status status( path const & p, std::error_code & ec ) noexcept;
         
@@ -301,7 +265,7 @@ namespace tinydircpp {
         path temporary_directory_path();
         path temporary_directory_path( std::error_code & ec) noexcept;
         
-        path unique_path( path const & directory_path = "%%%%-%%%%-%%%%-%%%%" );
+        path unique_path( path const & directory_path = path( "%%%%-%%%%-%%%%-%%%%" ) );
         path unique_path( path const & p, std::error_code & ec ) noexcept;
     }
 }

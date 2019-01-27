@@ -24,10 +24,14 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 // tinydircpp.cpp : Defines the exported functions for the static library.
-//
+
 
 #include "tinydircpp.hpp"
 #include <system_error>
+
+#define FSERROR_TRY_CATCH(throwing_code,catcher) try{ throwing_code; }\
+    catch(fs::filesystem_error const & e){ catcher = e.code(); }
+
 
 namespace tinydircpp {
     namespace fs {
@@ -65,12 +69,7 @@ namespace tinydircpp {
 
         path current_path( std::error_code & ec ) noexcept
         {
-            try {
-                return current_path();
-            }
-            catch ( fs::filesystem_error const & error ) {
-                ec = error.code();
-            }
+            FSERROR_TRY_CATCH( return current_path(), ec );
             return{};
         }
 
@@ -84,12 +83,7 @@ namespace tinydircpp {
 
         void current_path( path const & p, std::error_code & ec ) noexcept
         {
-            try {
-                current_path( p );
-            }
-            catch ( filesystem_error const & error ) {
-                ec = error.code();
-            }
+            FSERROR_TRY_CATCH( current_path( p ), ec );
         }
 
         void copy( path const & from, path const & to )
@@ -104,12 +98,7 @@ namespace tinydircpp {
 
         void copy( path const & from, path const & to, std::error_code & ec ) noexcept
         {
-            try {
-                copy( from, to );
-            }
-            catch ( fs::filesystem_error const & error ) {
-                ec = error.code();
-            }
+            FSERROR_TRY_CATCH( copy( from, to ), ec );
         }
 
         bool exists( path const & p )
@@ -125,6 +114,19 @@ namespace tinydircpp {
             return found;
         }
 
+        void create_symlink( path const & to, path const & new_symlink )
+        {
+            DWORD const flag = is_directory( to ) ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0;
+            if ( CreateSymbolicLink( to.string().c_str(), new_symlink.string().c_str(), flag ) == 0 ) {
+                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ),
+                    std::make_error_code( std::errc::no_link ) };
+            }
+        }
+
+        void create_symlink( path const & to, path const & new_symlink, std::error_code & ec ) noexcept
+        {
+            FSERROR_TRY_CATCH( create_symlink( to, new_symlink ), ec );
+        }
         bool exists( file_status status ) noexcept
         {
             return status_known( status ) && ( status.type() != file_type::not_found );
@@ -154,13 +156,30 @@ namespace tinydircpp {
         std::uintmax_t file_size( path const & p, std::error_code & ec ) noexcept
         {
             std::uintmax_t file_size = static_cast< std::uintmax_t >( -1 );
-            try {
-                file_size = file_size( p );
-            }
-            catch ( fs::filesystem_error const & error ) {
-                ec = error.code();
-            }
+            FSERROR_TRY_CATCH( file_size = file_size( p ), ec );
             return file_size;
+        }
+
+        std::uintmax_t hard_link_count( path const & p )
+        {
+            HANDLE h = CreateFile( ( LPCSTR ) p.string().c_str(), GENERIC_READ,
+                FILE_SHARE_READ | FILE_SUPPORTS_HARD_LINKS, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr );
+            if ( h == INVALID_HANDLE_VALUE ) {
+                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ),
+                    fs::filesystem_error_codes::handle_not_opened };
+            }
+            BY_HANDLE_FILE_INFORMATION file_information{};
+            if ( GetFileInformationByHandle( h, ( LPBY_HANDLE_FILE_INFORMATION ) &file_information ) == 0 ) {
+                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ),
+                    fs::filesystem_error_codes::hardlink_count_error };
+            }
+            return file_information.nNumberOfLinks;
+        }
+
+        std::uintmax_t hard_link_count( path const & p, std::error_code & ec ) noexcept
+        {
+            FSERROR_TRY_CATCH( return hard_link_count( p ), ec );
+            return static_cast< std::uintmax_t >( -1 );
         }
 
         bool is_regular_file( path const & p )
@@ -175,15 +194,9 @@ namespace tinydircpp {
 
         bool is_regular_file( path const & p, std::error_code & ec ) noexcept
         {
-            try {
-                return is_regular_file( p );
-            }
-            catch ( fs::filesystem_error const & e ) {
-                ec = e.code();
-            }
+            FSERROR_TRY_CATCH( return is_regular_file( p ), ec );
             return false;
         }
-
 
         bool is_directory( file_status s ) noexcept
         {
@@ -197,12 +210,7 @@ namespace tinydircpp {
 
         bool is_directory( path const & p, std::error_code & ec ) noexcept
         {
-            try {
-                return is_directory( p );
-            }
-            catch ( fs::filesystem_error const & fs_error ) {
-                ec = fs_error.code();
-            }
+            FSERROR_TRY_CATCH( return is_directory( p ), ec );
             return false;
         }
 
@@ -214,12 +222,7 @@ namespace tinydircpp {
 
         bool is_empty( path const & p, std::error_code & ec ) noexcept
         {
-            try {
-                return is_empty( p );
-            }
-            catch ( fs::filesystem_error const & err ) {
-                ec = err.code();
-            }
+            FSERROR_TRY_CATCH( return is_empty( p ), ec );
             return false;
         }
 
@@ -240,26 +243,23 @@ namespace tinydircpp {
         socket,
         unknown
     */
-        // to-do: determine the rest of the file type
+    // to-do: determine the rest of the file type
         file_status status( path const & p, std::error_code & ec )
         {
             DWORD const file_attrib = GetFileAttributes( p.string().c_str() );
             if ( file_attrib == INVALID_FILE_ATTRIBUTES ) {
-                ec = std::make_error_code( std::errc::no_such_file_or_directory );
+                ec = std::error_code( fs::filesystem_error_codes::handle_not_opened );
                 return file_status{ file_type::not_found };
             }
             ec.clear();
-            if ( file_attrib & FILE_ATTRIBUTE_DIRECTORY ) {
-                return file_status{ file_type::directory };
-            }
-            else if ( file_attrib & FILE_ATTRIBUTE_REPARSE_POINT ) {
+            if ( file_attrib & FILE_ATTRIBUTE_REPARSE_POINT ) {
                 WIN32_FIND_DATA find_data{};
                 HANDLE symlink_handle = FindFirstFile( p.string().c_str(), &find_data );
                 if ( symlink_handle == INVALID_HANDLE_VALUE ) {
                     ec = std::error_code( fs::filesystem_error_codes::handle_not_opened );
                     return file_status{ file_type::unknown };
                 }
-                if ( find_data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT 
+                if ( find_data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT
                     && IsReparseTagMicrosoft( find_data.dwReserved0 )
                     && find_data.dwReserved0 == IO_REPARSE_TAG_SYMLINK ) {
                     FindClose( symlink_handle );
@@ -268,7 +268,57 @@ namespace tinydircpp {
                 FindClose( symlink_handle );
                 return file_status{ file_type::unknown };
             }
+            else if ( file_attrib & FILE_ATTRIBUTE_DIRECTORY ) {
+                return file_status{ file_type::directory };
+            }
             return file_status{ file_type::regular };
+        }
+        bool status_known( file_status s ) noexcept
+        {
+            return s.type() != file_type::none;
+        }
+        file_status symlink_status( path const & p )
+        {
+            auto const stat{ status( p ) };
+            return is_symlink( stat ) ? stat : file_status{ file_type::none };
+        }
+
+        file_status symlink_status( path const & p, std::error_code & ec ) noexcept
+        {
+            FSERROR_TRY_CATCH( return symlink_status( p ), ec );
+            return file_status{ file_type::none };
+        }
+        path temporary_directory_path()
+        {
+            char temp_path[ TINYDIR_PATH_MAX + 2 ]{};
+            DWORD path_length = GetTempPath( TINYDIR_PATH_MAX, ( LPSTR ) temp_path );
+            if ( path_length == 0 ) {
+                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ),
+                std::make_error_code( std::errc::filename_too_long ) };
+            }
+            else if ( path_length > TINYDIR_PATH_MAX ) { // rare, but this is my fault, didn't allocate enough space
+                std::string new_path( path_length, ' ' );
+                path_length = GetTempPath( path_length, ( LPSTR ) &new_path[ 0 ] );
+                return path{ new_path };
+            }
+            return path{ temp_path };
+        }
+        path temporary_directory_path( std::error_code & ec ) noexcept
+        {
+            FSERROR_TRY_CATCH( return temporary_directory_path(), ec );
+            return path{};
+        }
+
+        void copy_symlink( path const & existing_symlink, path const & new_symlink )
+        {
+            create_symlink( read_symlink( existing_symlink ), new_symlink );
+        }
+
+        void copy_symlink( path const & existing_symlink, path const & new_symlink, std::error_code & ec ) noexcept
+        {
+            FSERROR_TRY_CATCH(create_symlink( read_symlink( existing_symlink, ec ), new_symlink, ec ), ec);
         }
     }
 }
+
+#undef FSERROR_TRY_CATCH

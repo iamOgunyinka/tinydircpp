@@ -10,15 +10,54 @@
 namespace tinydircpp
 {
     namespace fs {
-        class path;
+        class path {
+        public:
+            path() : path( "" ) {}
+            explicit path( std::string const & pathname ) : pathname_{ pathname } {}
+            explicit path( char const * pathname ) : pathname_{ pathname } {}
+            path( path const & name ) : pathname_{ name.pathname_ } {}
+            ~path() = default;
+            path& operator/=( path const & p );
+            path& append( std::string const & str );
+            path& append( path const & p );
+            path& operator +=( std::string const & str );
+            path& operator+=( path const & p );
+            path& operator+=( char p );
+            void clear() noexcept;
+            path& remove_filename();
+            path& replace_filename_with( path const & new_filename );
+            path& replace_extension( path const & );
+            int compare( path const & ) const noexcept;
+            int compare( std::string const & ) const noexcept;
+            path root_name() const;
+            path root_directory() const;
+            path relative_path() const;
+            path filename() const;
+            path extension() const;
+            std::string string() const;
+
+            bool empty() const;
+            bool has_root_name() const;
+            bool has_root_directory() const;
+            bool has_filename() const;
+            bool is_absolute() const;
+            bool is_relative() const;
+        private:
+            std::string pathname_;
+        };
+
         enum class filesystem_error_codes
         {
-            directory_name_unobtainable = 0,
-            unknown_io_error = 0x1,
-            handle_not_opened = 0x2,
-            could_not_obtain_size = 0x3
-
+            directory_name_unobtainable = 0x80,
+            unknown_io_error,
+            handle_not_opened,
+            could_not_obtain_size,
+            hardlink_count_error
         };
+        std::error_code make_error_code( filesystem_error_codes code ) {
+            return std::error_code( static_cast< int >( code ), std::generic_category() );
+        }
+
         namespace details PRIVATE_IMPL {
             struct invalid_filename : public std::runtime_error {
                 invalid_filename( char const * error_message ) : std::runtime_error{ error_message }{}
@@ -42,6 +81,7 @@ namespace tinydircpp
             }
         }
         using file_time_type = std::chrono::time_point<std::chrono::system_clock>;
+        using space_info = int;
 
         class filesystem_error : public std::system_error {
         public:

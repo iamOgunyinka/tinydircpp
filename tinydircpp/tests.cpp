@@ -30,6 +30,4 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 TEST_CASE( "Testing tinydircpp::fs free functions", "Success and failures" )
 {
     namespace fs = tinydircpp::fs;
-    REQUIRE( fs::current_path() != fs::path() );
-
 }

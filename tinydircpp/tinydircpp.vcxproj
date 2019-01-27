@@ -56,16 +56,18 @@
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+      <TreatWarningAsError Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</TreatWarningAsError>
+      <CppLanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">c++1y</CppLanguageStandard>
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">/GR %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="filehandler.cpp" />
     <ClCompile Include="tests.cpp" />
     <ClCompile Include="tinydircpp.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="external\catch.hpp" />
-    <ClInclude Include="filehandler.hpp" />
     <ClInclude Include="tinydircpp.hpp" />
     <ClInclude Include="utilities.hpp" />
   </ItemGroup>
