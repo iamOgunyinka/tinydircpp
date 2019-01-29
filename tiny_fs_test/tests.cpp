@@ -24,8 +24,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 #define CATCH_CONFIG_MAIN
+
 #include "external\catch.hpp"
-#include "tinydircpp.hpp"
+#include "..\tiny_fs\tinydircpp.hpp"
 
 TEST_CASE( "Testing tinydircpp::fs free functions", "Success and failures" )
 {

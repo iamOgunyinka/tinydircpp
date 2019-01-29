@@ -34,7 +34,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //According to the msdn documentation, _WIN32 is defined for both 32- and 64bit machines
 #ifdef _WIN32
 #define _WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #pragma warning (disable : 4996)
 #else
 #include <dirent.h>
@@ -55,6 +54,9 @@ constexpr unsigned int TINYDIR_PATH_EXTRA = 2;
 constexpr unsigned int TINYDIR_PATH_EXTRA = 0;
 #endif
 constexpr unsigned int TINYDIR_FILENAME_MAX = 256;
+
+#define FSERROR_TRY_CATCH(throwing_code,catcher) try{ throwing_code; }\
+    catch(fs::filesystem_error const & e){ catcher = e.code(); }
 
 namespace tinydircpp {
     namespace fs

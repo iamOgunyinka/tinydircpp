@@ -1,7 +1,39 @@
+/*
+Copyright (c) 2019 - Joshua Ogunyinka
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice,
+this list of conditions and the following disclaimer in the documentation
+and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
+
 #pragma once
 #include <stdexcept>
-#include <WinBase.h>
 #include <chrono>
+#include <ctime>
+
+#ifdef _WIN32
+#include <Windows.h>
+#else
+#include <sys/stat.h>
+#endif // _WIN32
 
 #ifndef PRIVATE_IMPL
 #define PRIVATE_IMPL
@@ -10,6 +42,14 @@
 namespace tinydircpp
 {
     namespace fs {
+        
+        using file_time_type = std::chrono::time_point<std::chrono::system_clock>;
+        using space_info = struct {
+            std::uintmax_t available;
+            std::uintmax_t capacity;
+            std::uintmax_t free;
+        };
+
         class path {
         public:
             path() : path( "" ) {}
@@ -52,7 +92,10 @@ namespace tinydircpp
             unknown_io_error,
             handle_not_opened,
             could_not_obtain_size,
-            hardlink_count_error
+            could_not_obtain_time,
+            hardlink_count_error,
+            invalid_set_file_pointer,
+            set_writetime_error
         };
         std::error_code make_error_code( filesystem_error_codes code ) {
             return std::error_code( static_cast< int >( code ), std::generic_category() );
@@ -68,9 +111,9 @@ namespace tinydircpp
 
             std::string get_windows_error( DWORD error_code )
             {
-                LPTSTR buffer = nullptr;
-                auto length = FormatMessageA( FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, 
-                    nullptr, error_code, MAKELANGID( LANG_NEUTRAL, SUBLANG_DEFAULT ), (LPTSTR)&buffer, 0, 
+                LPSTR buffer = nullptr;
+                DWORD length = FormatMessageA( FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, 
+                    nullptr, error_code, MAKELANGID( LANG_NEUTRAL, SUBLANG_DEFAULT ), (LPSTR)&buffer, 0, 
                     nullptr );
                 if ( length == 0 || buffer == nullptr ) { // there was an issue getting the error message from the system
                     return{};
@@ -79,10 +122,24 @@ namespace tinydircpp
                 LocalFree( buffer );
                 return message;
             }
-        }
-        using file_time_type = std::chrono::time_point<std::chrono::system_clock>;
-        using space_info = int;
 
+            file_time_type Win32FiletimeToChronoTime( LPFILETIME pFiletime )
+            {
+                ULARGE_INTEGER ll_now{};
+                ll_now.LowPart = pFiletime->dwLowDateTime;
+                ll_now.HighPart = pFiletime->dwHighDateTime;
+                std::time_t const epoch_time = ll_now.QuadPart / 10'000'000 - 11'644'473'600U;
+                return std::chrono::system_clock::from_time_t( epoch_time );
+            }
+
+            FILETIME ChronoTimeToWin32Filetime( file_time_type const & ftt )
+            {
+                ULONGLONG const unix_epoch_time = ftt.time_since_epoch().count();
+                ULARGE_INTEGER ll_now{};
+                ll_now.QuadPart = 10'000'000 * ( unix_epoch_time + 11'644'473'600U );
+                return FILETIME{ ll_now.LowPart, ll_now.HighPart };
+            }
+        }
         class filesystem_error : public std::system_error {
         public:
             filesystem_error( std::string const & what, std::error_code ec ) : filesystem_error{ what, {}, ec }{}
