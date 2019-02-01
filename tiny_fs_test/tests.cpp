@@ -31,4 +31,27 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 TEST_CASE( "Testing tinydircpp::fs free functions", "Success and failures" )
 {
     namespace fs = tinydircpp::fs;
+    using fs::status;
+    using fs::path;
+    using fs::file_type;
+
+    std::error_code ec{};
+
+    auto a_p = path{ "C:\\Users" }, b_p = path{ "C:\\Users\\Josh\\Desktop\\CC" },
+        c_p = path{ L"C:\\Users\\Josh\\Desktop\\push_back.cpp" },
+        d_p = path{ u"C:\\Windows\\System32\\ACCTRES.dll" }, e_p = path{ U"C:\\Users\\Public\\Foxit" };
+
+    auto const a = status( a_p, ec );
+    auto const b = status( b_p, ec );
+    auto const c = status( c_p, ec );
+    auto const d = status( d_p, ec );
+    auto const e = status( e_p );
+
+    REQUIRE( a.type() == file_type::directory );
+    REQUIRE( b.type() == file_type::symlink );
+    REQUIRE( c.type() == file_type::regular );
+    REQUIRE( d.type() == file_type::regular );
+    REQUIRE( e.type() == file_type::not_found );
+    REQUIRE( fs::read_symlink( b_p ).string() == "" );
+    REQUIRE( fs::read_symlink( a_p, ec ).string().empty() );
 }

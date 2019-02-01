@@ -71,11 +71,12 @@ namespace tinydircpp {
             file_type type() const noexcept { return ft_; }
             void type( file_type ) noexcept;
             perms permission() const noexcept { return permission_; }
-            void permission( perms ) noexcept;
+            void  permission( perms ) noexcept;
         private:
             file_type ft_;
             perms permission_;
         };
+        /*
 
         class directory_entry {
             using file_path = path;
@@ -83,9 +84,9 @@ namespace tinydircpp {
             directory_entry() = default;
             directory_entry( directory_entry const & ) = default;
             directory_entry( directory_entry && ) = default;
-            /** marked 'explicit' in the standard, but not here
-            I think a directory_entry should be constructible from any string 
-            */
+            // marked 'explicit' in the standard, but not here
+            //I think a directory_entry should be constructible from any string
+
             directory_entry( path const & path, file_status status = file_status{},
                 file_status symlink_status = file_status{} );
             ~directory_entry() = default;
@@ -137,28 +138,28 @@ namespace tinydircpp {
             directory_iterator& cbegin() const;
             directory_iterator& cend() const;
         };
-
+        */
         path current_path();
         path current_path( std::error_code & ec ) noexcept;
-        
+
         void current_path( path const & p );
         void current_path( path const & p, std::error_code & ec )noexcept;
-        
-        path absolute( path const & p, path const & base_path = current_path() );
-        
-        path canonical( path const & p, path const & base = current_path() );
-        path canonical( path const & p, std::error_code & ec ) noexcept;
-        path canonical( path const & p, path const & base, std::error_code & ec ) noexcept;
-        
+
+        //path absolute( path const & p, path const & base_path = current_path() );
+
+        //path canonical( path const & p, path const & base = current_path() );
+       // path canonical( path const & p, std::error_code & ec ) noexcept;
+        //path canonical( path const & p, path const & base, std::error_code & ec ) noexcept;
+
         void copy( path const & from, path const & to );
         void copy( path const & from, path const & to, std::error_code & ec ) noexcept;
-        bool copy( path const & from, path const & to, copy_options options );
-        bool copy( path const & from, path const & to, copy_options options, std::error_code & ec ) noexcept;
+        //bool copy( path const & from, path const & to, copy_options options );
+        //bool copy( path const & from, path const & to, copy_options options, std::error_code & ec ) noexcept;
 
-        void copy_file( path const & from, path const & to );
-        void copy_file( path const & from, path const & to, std::error_code & ec ) noexcept;
-        void copy_file( path const & from, path const & to, copy_options options );
-        void copy_file( path const & from, path const & to, copy_options options, std::error_code & ec ) noexcept;
+        //void copy_file( path const & from, path const & to );
+        //void copy_file( path const & from, path const & to, std::error_code & ec ) noexcept;
+       // void copy_file( path const & from, path const & to, copy_options options );
+        //void copy_file( path const & from, path const & to, copy_options options, std::error_code & ec ) noexcept;
 
         void copy_symlink( path const & existing_symlink, path const & new_symlink );
         void copy_symlink( path const & existing_symlink, path const & new_symlink, std::error_code & ec ) noexcept;
@@ -171,104 +172,104 @@ namespace tinydircpp {
 
         bool create_directory_symlink( path const & to, path const & new_symlink );
         bool create_directory_symlink( path const & to, path const & new_symlink, std::error_code & ec ) noexcept;
-        
+
         void create_hard_link( path const & to, path const & new_hardlink );
         void create_hard_link( path const & to, path const & new_hardlink, std::error_code & ec ) noexcept;
 
         void create_symlink( path const & to, path const & new_symlink );
         void create_symlink( path const & to, path const & new_symlink, std::error_code & ec ) noexcept;
-        
+
         bool exists( file_status s ) noexcept;
         bool exists( path const & p );
         bool exists( path const & p, std::error_code & ec ) noexcept;
-        
-        bool equivalent( path const & a, path const & b );
-        bool equivalent( path const & a, path const & b, std::error_code & ec ) noexcept;
+
+        //bool equivalent( path const & a, path const & b );
+        //bool equivalent( path const & a, path const & b, std::error_code & ec ) noexcept;
 
         std::uintmax_t file_size( path const & p );
         std::uintmax_t file_size( path const & p, std::error_code & ec ) noexcept;
-        
+
         std::uintmax_t hard_link_count( path const & p );
         std::uintmax_t hard_link_count( path const & p, std::error_code & ec ) noexcept;
-        
-        bool is_block_file( file_status s ) noexcept;
-        bool is_block_file( path const & p );
-        bool is_block_file( path const & p, std::error_code & ec ) noexcept;
-        
-        bool is_character_file( file_status s ) noexcept;
-        bool is_character_file( path const & p );
-        bool is_character_file( path const & p, std::error_code & ec ) noexcept;
-        
+
+        //bool is_block_file( file_status s ) noexcept;
+        //bool is_block_file( path const & p );
+        //bool is_block_file( path const & p, std::error_code & ec ) noexcept;
+
+        //bool is_character_file( file_status s ) noexcept;
+        //bool is_character_file( path const & p );
+        //bool is_character_file( path const & p, std::error_code & ec ) noexcept;
+
         bool is_directory( file_status s ) noexcept;
         bool is_directory( path const & p );
         bool is_directory( path const & p, std::error_code & ec ) noexcept;
-        
+
         bool is_empty( path const & p );
         bool is_empty( path const & p, std::error_code & ec ) noexcept;
-        
-        bool is_fifo( file_status s ) noexcept;
+
+        /*bool is_fifo( file_status s ) noexcept;
         bool is_fifo( path const & p );
         bool is_fifo( path const & p, std::error_code & ec ) noexcept;
-        
+
         bool is_other( file_status s ) noexcept;
         bool is_other( path const & p );
         bool is_other( path const & p, std::error_code & ec ) noexcept;
-
+*/
         bool is_regular_file( file_status s ) noexcept;
         bool is_regular_file( path const & p );
         bool is_regular_file( path const & p, std::error_code & ec ) noexcept;
 
-        bool is_socket( file_status s ) noexcept;
+        /*bool is_socket( file_status s ) noexcept;
         bool is_socket( path const & p );
         bool is_socket( path const & p, std::error_code & ec ) noexcept;
-
+        */
         bool is_symlink( file_status s ) noexcept;
         bool is_symlink( path const & p );
         bool is_symlink( path const & p, std::error_code & ec ) noexcept;
 
         file_time_type last_write_time( path const & p );
         file_time_type last_write_time( path const & p, std::error_code & ec ) noexcept;
-        
+
         void last_write_time( path const & p, file_time_type new_time );
         void last_write_time( path const & p, file_time_type new_time, std::error_code & ec ) noexcept;
 
-        void permissions( path const & p, perms perm );
-        void permissions( path const & p, perms perm, std::error_code & ec ) noexcept;
+        //void permissions( path const & p, perms perm );
+        //void permissions( path const & p, perms perm, std::error_code & ec ) noexcept;
 
         path read_symlink( path const & p );
         path read_symlink( path const & p, std::error_code & ec ) noexcept;
-        
-        bool remove( path const & p );
-        bool remove( path const & p, std::error_code & ex ) noexcept;
 
-        std::uintmax_t remove_all( path const & p );
-        std::uintmax_t remove_all( path const & p, std::error_code &ec ) noexcept;
+        //bool remove( path const & p );
+        //bool remove( path const & p, std::error_code & ex ) noexcept;
 
-        void rename( path const & p, perms perm );
-        void rename( path const & p, perms perm, std::error_code & ec ) noexcept;
-        
+        //std::uintmax_t remove_all( path const & p );
+        //std::uintmax_t remove_all( path const & p, std::error_code &ec ) noexcept;
+
+        //void rename( path const & p, perms perm );
+        //void rename( path const & p, perms perm, std::error_code & ec ) noexcept;
+
         void resize_file( path const & p, std::uintmax_t new_size );
         void resize_file( path const & p, std::uintmax_t new_size, std::error_code & ec ) noexcept;
-        
+
         space_info space( path const &p );
         space_info space( path const &p, std::error_code & ec ) noexcept;
-        
+
         file_status status( path const & p );
         file_status status( path const & p, std::error_code & ec ) noexcept;
-        
+
         bool status_known( file_status s ) noexcept;
-        
+
         file_status symlink_status( path const & p );
         file_status symlink_status( path const & p, std::error_code &ec ) noexcept;
 
-        path system_complete( path const & p );
-        path system_complete( path const & p, std::error_code &ec ) noexcept;
+        //path system_complete( path const & p );
+        //path system_complete( path const & p, std::error_code &ec ) noexcept;
 
         path temporary_directory_path();
-        path temporary_directory_path( std::error_code & ec) noexcept;
-        
-        path unique_path( path const & directory_path = path( "%%%%-%%%%-%%%%-%%%%" ) );
-        path unique_path( path const & p, std::error_code & ec ) noexcept;
+        path temporary_directory_path( std::error_code & ec ) noexcept;
+
+        //path unique_path( path const & directory_path = path( "%%%%-%%%%-%%%%-%%%%" ) );
+        //path unique_path( path const & p, std::error_code & ec ) noexcept;
     }
 }
 #endif
