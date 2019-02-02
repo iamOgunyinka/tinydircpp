@@ -10,6 +10,19 @@ namespace tinydircpp
         path::path( char const *p ) : pathname_{ p }
         {
         }
+        path & path::operator=( path const & p )
+        {
+            if ( this != &p ) {
+                pathname_ = p.pathname_;
+            }
+            return *this;
+        }
+        path & path::operator=( path && p )
+        {
+            using std::swap;
+            swap( *this, std::move( p ) );
+            return *this;
+        }
         path::path( std::wstring const & pathname ) : pathname_{}
         {
             details::convert_to( pathname, pathname_ );
@@ -27,6 +40,11 @@ namespace tinydircpp
         {
         }
         path::path( path const & p ) : pathname_{ p.pathname_ } {
+        }
+        path path::filename() const
+        {
+            if ( pathname_.empty() ) return{};
+            pathname_.rfind( SLASH );
         }
         std::u32string path::u32string() const
         {

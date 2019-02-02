@@ -41,12 +41,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 
-#ifdef _WIN32
-#define SLASH "\\"
-#else
-#define SLASH "/"
-#endif
-
 constexpr unsigned int TINYDIR_PATH_MAX = 512;
 #ifdef _WIN32
 constexpr unsigned int TINYDIR_PATH_EXTRA = 2;
@@ -76,7 +70,6 @@ namespace tinydircpp {
             file_type ft_;
             perms permission_;
         };
-        /*
 
         class directory_entry {
             using file_path = path;
@@ -98,10 +91,8 @@ namespace tinydircpp {
 
             file_path path() const noexcept;
             file_status status() const noexcept;
-            file_status status( std::error_code & ec ) const noexcept;
             file_status symlink_status() const;
-            file_status symlink_status( std::error_code & ec ) const noexcept;
-
+            
             bool operator<( directory_entry const & );
             bool operator<=( directory_entry const & );
             bool operator==( directory_entry const & );
@@ -138,14 +129,14 @@ namespace tinydircpp {
             directory_iterator& cbegin() const;
             directory_iterator& cend() const;
         };
-        */
+        
         path current_path();
         path current_path( std::error_code & ec ) noexcept;
 
         void current_path( path const & p );
         void current_path( path const & p, std::error_code & ec )noexcept;
 
-        //path absolute( path const & p, path const & base_path = current_path() );
+        path absolute( path const & p, path const & base_path = current_path() );
 
         //path canonical( path const & p, path const & base = current_path() );
        // path canonical( path const & p, std::error_code & ec ) noexcept;
@@ -268,6 +259,7 @@ namespace tinydircpp {
         path temporary_directory_path();
         path temporary_directory_path( std::error_code & ec ) noexcept;
 
+        bool operator==( path const & a, path const & b );
         //path unique_path( path const & directory_path = path( "%%%%-%%%%-%%%%-%%%%" ) );
         //path unique_path( path const & p, std::error_code & ec ) noexcept;
     }

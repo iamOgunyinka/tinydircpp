@@ -37,21 +37,23 @@ TEST_CASE( "Testing tinydircpp::fs free functions", "Success and failures" )
 
     std::error_code ec{};
 
-    auto a_p = path{ "C:\\Users" }, b_p = path{ "C:\\Users\\Josh\\Desktop\\CC" },
-        c_p = path{ L"C:\\Users\\Josh\\Desktop\\push_back.cpp" },
-        d_p = path{ u"C:\\Windows\\System32\\ACCTRES.dll" }, e_p = path{ U"C:\\Users\\Public\\Foxit" };
+    auto path_1 = path{ "C:\\Users" }, 
+        symlink_path = path{ "C:\\Users\\Josh\\Desktop\\CC" }, // a symlink created by Window's mklink /D
+        cpp_file_path = path{ L"C:\\Users\\Josh\\Desktop\\push_back.cpp" },
+        system_file_path = path{ u"C:\\Windows\\System32\\ACCTRES.dll" }, 
+        random_dir_path = path{ U"C:\\Users\\Public\\Foxit" };
 
-    auto const a = status( a_p, ec );
-    auto const b = status( b_p, ec );
-    auto const c = status( c_p, ec );
-    auto const d = status( d_p, ec );
-    auto const e = status( e_p );
+    auto const a = status( path_1, ec );
+    auto const b = status( symlink_path, ec );
+    auto const c = status( cpp_file_path, ec );
+    auto const d = status( system_file_path, ec );
+    auto const e = status( random_dir_path );
 
     REQUIRE( a.type() == file_type::directory );
     REQUIRE( b.type() == file_type::symlink );
     REQUIRE( c.type() == file_type::regular );
     REQUIRE( d.type() == file_type::regular );
     REQUIRE( e.type() == file_type::not_found );
-    REQUIRE( fs::read_symlink( b_p ).string() == "" );
-    REQUIRE( fs::read_symlink( a_p, ec ).string().empty() );
+    REQUIRE( fs::read_symlink( system_file_path, ec ).string().empty() );
+    REQUIRE( fs::read_symlink( cpp_file_path ).u32string() == U"" );
 }

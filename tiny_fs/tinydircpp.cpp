@@ -28,7 +28,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "tinydircpp.hpp"
 #include <system_error>
-#include <cassert>
+#include <iostream>
 #ifdef _WIN32
 #include <ShlObj.h>
 #endif // _WIN32
@@ -52,12 +52,7 @@ namespace tinydircpp {
         {
             permission_ = prms;
         }
-        /*
-                directory_entry::directory_entry( directory_entry::file_path const & p, file_status status,
-                    file_status symlink_status ) : path_{ p }, status_{ status }, symlink_status_{ symlink_status }
-                {
-                }
-        */
+        
         path current_path()
         {
             wchar_t file_path[ TINYDIR_FILENAME_MAX + 2 ] = {};
@@ -86,6 +81,11 @@ namespace tinydircpp {
         void current_path( path const & p, std::error_code & ec ) noexcept
         {
             FSERROR_TRY_CATCH( current_path( p ), ec );
+        }
+
+        path absolute( path const & p, path const & base_path )
+        {
+            return path{};
         }
 
         void copy( path const & from, path const & to )
@@ -214,7 +214,7 @@ namespace tinydircpp {
 
         std::uintmax_t hard_link_count( path const & p )
         {
-            HANDLE h = CreateFileW( p.wstring().c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 
+            HANDLE h = CreateFileW( p.wstring().c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
                 FILE_ATTRIBUTE_NORMAL, nullptr );
             if ( h == INVALID_HANDLE_VALUE ) {
                 throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ),
@@ -364,6 +364,11 @@ namespace tinydircpp {
             return path{};
         }
 
+        bool operator==( path const & a, path const & b )
+        {
+            return absolute( a ).string() == absolute( b ).string();
+        }
+
         void copy_symlink( path const & existing_symlink, path const & new_symlink )
         {
             create_symlink( read_symlink( existing_symlink ), new_symlink );
@@ -460,6 +465,7 @@ namespace tinydircpp {
         path read_symlink( path const & p )
         {
             if ( !is_symlink( p ) ) return path{};
+
             HANDLE h = CreateFileW( p.wstring().c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING,
                 FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr );
             if ( h == INVALID_HANDLE_VALUE ) {
@@ -467,19 +473,23 @@ namespace tinydircpp {
                     std::error_code( fs::filesystem_error_codes::handle_not_opened ) };
             }
             DWORD returned_data_size = 0;
-            fs::REPARSE_DATA_BUFFER reparse_buffer{};
-            if ( DeviceIoControl( h, FSCTL_GET_REPARSE_POINT, nullptr, 0, &reparse_buffer, sizeof( reparse_buffer ),
+
+            union anon_info {
+                char abyss[ offsetof( fs::REPARSE_DATA_BUFFER, GenericReparseBuffer ) + ( 1024 * 16 ) ];
+                fs::REPARSE_DATA_BUFFER reparse_buffer;
+            } ai; // borrowed from boost::filesystem
+            if ( DeviceIoControl( h, FSCTL_GET_REPARSE_POINT, nullptr, 0, &ai.reparse_buffer, sizeof( anon_info ),
                 &returned_data_size, nullptr ) == 0 ) {
                 CloseHandle( h );
                 throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ), p,
                     std::error_code( fs::filesystem_error_codes::unknown_io_error ) };
             }
             CloseHandle( h );
-            std::wstring target_name{ static_cast< wchar_t* >( reparse_buffer.SymbolicLinkReparseBuffer.PathBuffer )
-                + reparse_buffer.SymbolicLinkReparseBuffer.PrintNameOffset / 2,
-                static_cast< wchar_t* >( reparse_buffer.SymbolicLinkReparseBuffer.PathBuffer )
-                + reparse_buffer.SymbolicLinkReparseBuffer.PrintNameOffset / 2
-                + reparse_buffer.SymbolicLinkReparseBuffer.PrintNameLength / 2 };
+            std::wstring target_name{ static_cast< wchar_t* >( ai.reparse_buffer.SymbolicLinkReparseBuffer.PathBuffer )
+                + ai.reparse_buffer.SymbolicLinkReparseBuffer.PrintNameOffset / 2,
+                static_cast< wchar_t* >( ai.reparse_buffer.SymbolicLinkReparseBuffer.PathBuffer )
+                + ai.reparse_buffer.SymbolicLinkReparseBuffer.PrintNameOffset / 2
+                + ai.reparse_buffer.SymbolicLinkReparseBuffer.PrintNameLength / 2 };
             return path{ target_name };
         }
 
@@ -539,6 +549,23 @@ namespace tinydircpp {
             return space_info{};
         }
 
+        directory_entry::directory_entry( path const & path, file_status status, file_status symlink_status ):
+            path_{ path }, status_{ status }, symlink_status_{ symlink_status }
+        {
+        }
+
+        file_path directory_entry::path() const noexcept
+        {
+            return path_;
+        }
+        file_status directory_entry::status() const noexcept
+        {
+            return status_;
+        }
+        file_status directory_entry::symlink_status() const
+        {
+            return symlink_status_;
+        }
     }
 }
 
