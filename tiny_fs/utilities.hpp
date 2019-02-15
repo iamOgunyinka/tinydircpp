@@ -37,9 +37,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifdef _WIN32
 #include <Windows.h>
 #define SLASH "\\"
+#define WSLASH L"\\"
 #else
 #include <sys/stat.h>
 #define SLASH "/"
+#define WSLASH L"/"
 #endif // _WIN32
 
 
@@ -53,6 +55,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define TINY_CHAR32_T char32_t
 #endif // _MSC_VER
 
+#ifdef _WIN32
+#define IS_DIR_SEPARATOR(c) (c=='\\')
+#define IS_DIR_SEPARATORW(c) (c==L'\\')
+#else
+#define IS_DIR_SEPARATOR(c) (c=='/')
+#endif
+
 namespace tinydircpp
 {
     namespace fs {
@@ -63,13 +72,19 @@ namespace tinydircpp
             std::uintmax_t capacity;
             std::uintmax_t free;
         };
+        template<typename T>
+        using str_t = std::basic_string<T, std::char_traits<T>>;
 
         class path {
         public:
+            using value_type = wchar_t;
+            using string_type = typename str_t<value_type>;
+        public:
+
             path() = default;
             ~path() = default;
-            path( path && p ) = default;
-            path( path const & p );
+            path( path && p ) : pathname_{ std::move( p.pathname_ ) } {}
+            path( path const & p ) : pathname_{ p.pathname_ } {}
 
             explicit path( std::wstring const & pathname );
             explicit path( std::string const & pathname );
@@ -77,33 +92,51 @@ namespace tinydircpp
             explicit path( std::u32string const & pathname );
             explicit path( wchar_t const * pathname );
             explicit path( char const * pathname );
+
+            template<typename InputIterator>
+            path( InputIterator begin, InputIterator end );
+
             path& operator=( path const & p );
             path& operator=( path && p );
             template<typename Source>
             path& operator=( Source const & source )
             {
+                *this = path{ source };
                 return *this;
             }
 
             template<typename Source>
             path& assign( Source const & source )
             {
+                *this = source;
                 return *this;
             }
 
             template<typename InputIterator>
             path& assign( InputIterator beg, InputIterator end )
             {
+                *this = path{ beg, end };
                 return *this;
             }
             void clear() noexcept {
                 pathname_.clear();
             }
 
-            /*
             path& operator/=( path const & p );
-            path& append( std::string const & str );
-            path& append( path const & p );
+            bool operator<( path const & p ) {
+                return pathname_ < p.pathname_;
+            }
+            bool operator>( path const & p ) {
+                return pathname_ > p.pathname_;
+            }
+
+            bool operator<=( path const & p ) {
+                return pathname_ <= p.pathname_;
+            }
+            bool operator>=( path const & p ) {
+                return pathname_ >= p.pathname_;
+            }
+            /*
             path& operator +=( std::string const & str );
             path& operator+=( path const & p );
             path& operator+=( char p );
@@ -115,23 +148,36 @@ namespace tinydircpp
             path root_name() const;
             path root_directory() const;
             path relative_path() const;
-            path extension() const;
             */
+            path extension() const;
             path filename() const;
 
             std::u32string u32string() const;
             std::u16string u16string() const;
             std::wstring wstring() const;
             std::string string() const;
+
+            bool empty() const {
+                return pathname_.empty();
+            }
+
+            string_type const & native() const noexcept {
+                return pathname_;
+            }
+            value_type const * c_str() const noexcept {
+                return pathname_.c_str();
+            }
+            operator string_type() const {
+                return pathname_;
+            }
             /*
-            bool empty() const;
             bool has_root_name() const;
             bool has_root_directory() const;
             bool has_filename() const;
             bool is_absolute() const;
             bool is_relative() const; */
         private:
-            std::string pathname_; // basic-string
+            str_t<value_type> pathname_; // basic-string
         };
 
         enum class filesystem_error_codes
@@ -143,7 +189,7 @@ namespace tinydircpp
             could_not_obtain_time,
             hardlink_count_error,
             invalid_set_file_pointer,
-            set_writetime_error
+            set_filetime_error
         };
 
         std::error_code make_error_code( filesystem_error_codes code );
@@ -158,97 +204,35 @@ namespace tinydircpp
 
             std::string get_windows_error( DWORD error_code );
 
-            file_time_type Win32FiletimeToChronoTime( LPFILETIME pFiletime );
+            file_time_type Win32FiletimeToChronoTime( FILETIME const &pFiletime );
             FILETIME ChronoTimeToWin32Filetime( file_time_type const & ftt );
 
             template<typename T>
-            using str_t = std::basic_string<T, std::char_traits<T>>;
-
-#ifdef _MSC_VER
-            void convert_to( str_t<wchar_t> const & from, str_t<char> & to )
+            bool is_filename( str_t<T> const & str )
             {
-                auto & converter = std::use_facet<std::codecvt<wchar_t, char, std::mbstate_t>>( std::locale() );
-                std::mbstate_t state{};
-                to.resize( from.size() * converter.max_length() );
-                typename std::add_pointer<typename std::add_const<wchar_t>::type>::type f{};
-                char* t{};
-                converter.out( state, &from[ 0 ], &from[ from.size() ], f, &to[ 0 ], &to[ to.size() ], t );
+                std::locale locale_{};
+                return std::all_of( std::begin( str ), std::end( str ), [&]( T const & ch ) {
+                    return std::isalnum( ch, locale_ ) || ( T( '.' ) == ch ) || ( T( '_' ) == ch ) || ( T( '-' ) == ch );
+                } );
             }
 
-            void convert_to( str_t<char16_t> const & from, str_t<char> & to )
-            {
-                auto & converter = std::use_facet<std::codecvt<unsigned short, char, std::mbstate_t>>( std::locale() );
-                std::mbstate_t state{};
-                to.resize( from.size() * converter.max_length() );
-                typename std::add_pointer<typename std::add_const<unsigned short>::type>::type f{};
-                char* t{};
-                auto p = reinterpret_cast< unsigned short const * >( from.data() );
-                converter.out( state, p, p + from.size(), f, &to[ 0 ], &to[ to.size() ], t );
-            }
+            void convert_to( str_t<wchar_t> const & from, str_t<char32_t> & to );
+            void convert_to( str_t<char32_t> const & from, str_t<wchar_t> & to );
+            void convert_to( str_t<wchar_t> const & from, str_t<char> & to );
+            void convert_to( str_t<char16_t> const & from, str_t<char> & to );
+            void convert_to( str_t<char32_t> const & from, str_t<char> & to );
+            void convert_to( str_t<char> const & from, str_t<char16_t> & to );
+            void convert_to( str_t<char> const & from, str_t<char32_t> & to );
+            void convert_to( str_t<char> const &from, str_t<char> & to );
+            void convert_to( str_t<char> const & from, str_t<wchar_t> & to );
 
-            void convert_to( str_t<char32_t> const & from, str_t<char> & to )
-            {
-                auto & converter = std::use_facet<std::codecvt<unsigned int, char, std::mbstate_t>>( std::locale() );
-                std::mbstate_t state{};
-                to.resize( from.size() * converter.max_length() );
-                typename std::add_pointer<typename std::add_const<unsigned int>::type>::type f{};
-                char* t{};
-                auto p = reinterpret_cast< unsigned int const * >( from.data() );
-                converter.out( state, p, p + from.size(), f, &to[ 0 ], &to[ to.size() ], t );
-            }
-            // str_t<char> --> str_t<char16_t>
-            void convert_to( str_t<char> const & from, str_t<char16_t> & to )
-            {
-                auto result = std::wstring_convert<std::codecvt_utf8_utf16<unsigned short>,
-                    unsigned short>{}.from_bytes( from );
-                to = str_t<char16_t>( reinterpret_cast< char16_t const* >( result.data() ) );
-            }
-
-            void convert_to( str_t<char> const & from, str_t<char32_t> & to )
-            {
-                auto result = std::wstring_convert<std::codecvt_utf8<unsigned int>, unsigned int>{}.from_bytes( from );
-                to = str_t<char32_t>( reinterpret_cast< char32_t const* >( result.data() ) );
-            }
-#else
-            template<typename From, typename To>
-            void convert_to( str_t<From> const & from, str_t<To> & to );
-            /*
-            str_t<wchar_t && char16_t && char32_t> --> str_t<char>
-            */
-            template<typename From>
-            void convert_to( str_t<From> const & from, str_t<char> & to )
-            {
-                auto & converter = std::use_facet<std::codecvt<From, char, std::mbstate_t>>( std::locale() );
-                std::mbstate_t state{};
-                to.resize( from.size() * converter.max_length() );
-                typename std::add_pointer<typename std::add_const<From>::type>::type f{};
-                char* t{};
-                converter.out( state, &from[ 0 ], &from[ from.size() ], f, &to[ 0 ], &to[ to.size() ], t );
-            }
-            /*
-            str_t<char> --> str_t<char16_t, char32_t>
-            */
-            template<typename T, typename = typename std::enable_if<
-                std::is_same<T, char16_t>::value || std::is_same<T, char32_t>::value>::type>
-            void convert_to( str_t<char> const & from, str_t<T> & to )
-            {
-                using ToType = typename std::conditional<std::is_same<T, str_t<char16_t>>::value, 
-                    std::codecvt_utf8_utf16<T>, std::codecvt_utf8<T>>::type;
-                to = std::wstring_convert<ToType, T>{}.from_bytes( from );
-                return std::codecvt_base::ok;
-            }
-            template<>
-#endif // _MSC_VER
-            void convert_to( str_t<char> const & from, str_t<wchar_t> & to )
-            {
-                std::size_t const len = std::mbstowcs( nullptr, &from[ 0 ], from.size() );
-                if ( len == ( std::size_t ) - 1 ) throw std::bad_exception{};
-                to.resize( len + 1 );
-                if ( std::mbstowcs( &to[ 0 ], from.c_str(), from.size() ) != ( std::size_t ) - 1 ) {
-                    to[ len ] = L'\0';
-                }
-            }
         }
+        template<typename InputIterator>
+        path::path( InputIterator begin, InputIterator end ) : // we delegate the task to a ctor taking a string type
+            path{ str_t<typename std::iterator_traits<InputIterator>::value_type>{ begin, end } }
+        {
+        }
+
         class filesystem_error : public std::system_error {
         public:
             filesystem_error( std::string const & what, std::error_code ec ) : filesystem_error{ what, {}, ec } {}

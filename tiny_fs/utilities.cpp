@@ -4,10 +4,11 @@ namespace tinydircpp
 {
     namespace fs
     {
-        path::path( std::string const & pathname ) : pathname_{ pathname }
+        path::path( std::string const & pathname ) : pathname_{}
         {
+            details::convert_to( pathname, pathname_ );
         }
-        path::path( char const *p ) : pathname_{ p }
+        path::path( char const *p ) : path{ std::string{ p } }
         {
         }
         path & path::operator=( path const & p )
@@ -19,59 +20,76 @@ namespace tinydircpp
         }
         path & path::operator=( path && p )
         {
-            using std::swap;
-            swap( *this, std::move( p ) );
+            this->pathname_ = std::move( p.pathname_ );
             return *this;
         }
-        path::path( std::wstring const & pathname ) : pathname_{}
+        path::path( std::wstring const & pathname ) : pathname_{pathname}
         {
-            details::convert_to( pathname, pathname_ );
         }
-        path::path( std::u16string const & pathname ) : pathname_{}
+        path::path( std::u16string const & pathname ) : pathname_( pathname.begin(), pathname.end() )
         {
-            details::convert_to( pathname, pathname_ );
         }
 
         path::path( std::u32string const & pathname ) : pathname_{}
         {
             details::convert_to( pathname, pathname_ );
         }
-        path::path( wchar_t const * pathname ) : path{ std::wstring{ pathname } }
+
+        path::path( wchar_t const * pathname ) : pathname_{ pathname }
         {
         }
-        path::path( path const & p ) : pathname_{ p.pathname_ } {
+        
+        path & path::operator/=( path const & p )
+        {
+            if ( p.empty() ) return *this;
+            if ( !IS_DIR_SEPARATOR( *p.native().cbegin() ) && ( empty() && !IS_DIR_SEPARATOR( pathname_.back() ) ) ) {
+                pathname_ += WSLASH;
+            }
+            pathname_ += p.native();
+            return *this;
         }
+
+        path path::extension() const
+        {
+            auto const filename = this->filename().string();
+            if ( filename.empty() ) return path{};
+            auto pos = filename.rfind( "." );
+            if ( filename.size() == 1 || filename.size() == 2 || pos == std::string::npos ) return path{};
+            return path{ filename.substr( pos ) };
+        }
+
         path path::filename() const
         {
-            if ( pathname_.empty() ) return{};
-            pathname_.rfind( SLASH );
+            std::wstring::size_type const loc = pathname_.rfind( WSLASH );
+            if ( loc == 0 || loc == pathname_.size() - 1 ) return{};
+            return path{ pathname_.cbegin() + ( loc == std::wstring::npos ? 0 : loc + 1 ), pathname_.cend() };
         }
+
         std::u32string path::u32string() const
         {
             std::u32string ret{};
             details::convert_to( pathname_, ret );
             return ret;
         }
+
         std::u16string path::u16string() const
         {
-            std::u16string ret{};
-            details::convert_to( pathname_, ret );
-            return ret;
+            return std::u16string( pathname_.begin(), pathname_.end() );
         }
 
         std::wstring path::wstring() const
         {
-            std::wstring ret{};
-            details::convert_to( pathname_, ret );
-            return ret;
+            return pathname_;
         }
 
         std::string path::string() const
         {
-            return pathname_;
+            std::string temp{};
+            details::convert_to( pathname_, temp );
+            return temp;
         }
 
-        std::error_code make_error_code( filesystem_error_codes code ){
+        std::error_code make_error_code( filesystem_error_codes code ) {
             return std::error_code( static_cast< int >( code ), std::generic_category() );
         }
 
@@ -91,11 +109,11 @@ namespace tinydircpp
                 return message;
             }
 
-            file_time_type Win32FiletimeToChronoTime( LPFILETIME pFiletime )
+            file_time_type Win32FiletimeToChronoTime( FILETIME const &pFiletime )
             {
                 ULARGE_INTEGER ll_now{};
-                ll_now.LowPart = pFiletime->dwLowDateTime;
-                ll_now.HighPart = pFiletime->dwHighDateTime;
+                ll_now.LowPart = pFiletime.dwLowDateTime;
+                ll_now.HighPart = pFiletime.dwHighDateTime;
                 std::time_t const epoch_time = ll_now.QuadPart / 10'000'000 - 11'644'473'600U;
                 return std::chrono::system_clock::from_time_t( epoch_time );
             }
@@ -107,7 +125,81 @@ namespace tinydircpp
                 ll_now.QuadPart = 10'000'000 * ( unix_epoch_time + 11'644'473'600U );
                 return FILETIME{ ll_now.LowPart, ll_now.HighPart };
             }
+            void convert_to( str_t<wchar_t> const & from, str_t<char32_t> & to )
+            {
+                std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t> converter{};
+                std::string const str( converter.to_bytes( from ) );
+                std::wstring_convert<std::codecvt_utf8<unsigned int>, unsigned int> c32_converter{};
+                auto const new_to = c32_converter.from_bytes( str );
+                to = reinterpret_cast< char32_t const* >( new_to.data() );
+            }
+
+            void convert_to( str_t<char32_t> const & from, str_t<wchar_t> & to )
+            {
+                std::wstring_convert<std::codecvt_utf8<unsigned int>, unsigned int> c32_converter{};
+                auto const str( c32_converter.to_bytes( reinterpret_cast< unsigned int const* >( from.data() ) ) );
+                to = std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}.from_bytes( str );
+            }
+
+            void convert_to( str_t<wchar_t> const & from, str_t<char> & to )
+            {
+                auto & converter = std::use_facet<std::codecvt<wchar_t, char, std::mbstate_t>>( std::locale() );
+                std::mbstate_t state{};
+                to.resize( from.size() * converter.max_length() );
+                typename std::add_pointer<typename std::add_const<wchar_t>::type>::type f{};
+                char* t{};
+                converter.out( state, &from[ 0 ], &from[ from.size() ], f, &to[ 0 ], &to[ to.size() ], t );
+            }
+
+            void convert_to( str_t<char16_t> const & from, str_t<char> & to )
+            {
+                auto & converter = std::use_facet<std::codecvt<unsigned short, char, std::mbstate_t>>( std::locale() );
+                std::mbstate_t state{};
+                to.resize( from.size() * converter.max_length() );
+                typename std::add_pointer<typename std::add_const<unsigned short>::type>::type f{};
+                char* t{};
+                auto p = reinterpret_cast< unsigned short const * >( from.data() );
+                converter.out( state, p, p + from.size(), f, &to[ 0 ], &to[ to.size() ], t );
+            }
+
+            void convert_to( str_t<char32_t> const & from, str_t<char> & to )
+            {
+                auto & converter = std::use_facet<std::codecvt<unsigned int, char, std::mbstate_t>>( std::locale() );
+                std::mbstate_t state{};
+                to.resize( from.size() * converter.max_length() );
+                typename std::add_pointer<typename std::add_const<unsigned int>::type>::type f{};
+                char* t{};
+                auto p = reinterpret_cast< unsigned int const * >( from.data() );
+                converter.out( state, p, p + from.size(), f, &to[ 0 ], &to[ to.size() ], t );
+            }
+            // str_t<char> --> str_t<char16_t>
+            void convert_to( str_t<char> const & from, str_t<char16_t> & to )
+            {
+                auto result = std::wstring_convert<std::codecvt_utf8_utf16<unsigned short>,
+                    unsigned short>{}.from_bytes( from );
+                to = str_t<char16_t>( reinterpret_cast< char16_t const* >( result.data() ) );
+            }
+
+            void convert_to( str_t<char> const & from, str_t<char32_t> & to )
+            {
+                auto result = std::wstring_convert<std::codecvt_utf8<unsigned int>, unsigned int>{}.from_bytes( from );
+                to = str_t<char32_t>( reinterpret_cast< char32_t const* >( result.data() ) );
+            }
+
+            void convert_to( str_t<char> const &from, str_t<char> & to ) {
+                to = from;
+            }
+
+            void convert_to( str_t<char> const & from, str_t<wchar_t> & to )
+            {
+                std::size_t const len = std::mbstowcs( nullptr, &from[ 0 ], from.size() );
+                if ( len == ( std::size_t ) - 1 ) throw std::bad_exception{};
+                to.resize( len );
+                if ( std::mbstowcs( &to[ 0 ], from.c_str(), from.size() ) == ( std::size_t ) - 1 ) {
+                    throw std::runtime_error( "Unable to convert std::string to std::wstring" );
+                }
+            }
         }
-        
+
     }
 }

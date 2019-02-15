@@ -49,8 +49,14 @@ constexpr unsigned int TINYDIR_PATH_EXTRA = 0;
 #endif
 constexpr unsigned int TINYDIR_FILENAME_MAX = 256;
 
+
 #define FSERROR_TRY_CATCH(throwing_code,catcher) try{ throwing_code; }\
     catch(fs::filesystem_error const & e){ catcher = e.code(); }
+#define FSTHROW_MANUAL(enum_code) throw fs::filesystem_error{ \
+    fs::details::get_windows_error( GetLastError() ), p, std::error_code( enum_code )}
+#define FSTHROW(enum_code) throw fs::filesystem_error{ \
+    fs::details::get_windows_error( GetLastError() ), p, std::make_error_code(enum_code)}
+
 
 namespace tinydircpp {
     namespace fs
@@ -58,9 +64,9 @@ namespace tinydircpp {
         class file_status {
         public:
             explicit file_status( file_type ft = file_type::none, perms permission = perms::none ) noexcept;
-            file_status( file_status const & ) noexcept = default;
-            file_status( file_status && ) noexcept = default;
-            ~file_status() = default;
+            //file_status( file_status const & ) noexcept = default;
+            //file_status( file_status && ) noexcept = default;
+            //~file_status() = default;
 
             file_type type() const noexcept { return ft_; }
             void type( file_type ) noexcept;
@@ -77,10 +83,7 @@ namespace tinydircpp {
             directory_entry() = default;
             directory_entry( directory_entry const & ) = default;
             directory_entry( directory_entry && ) = default;
-            // marked 'explicit' in the standard, but not here
-            //I think a directory_entry should be constructible from any string
-
-            directory_entry( path const & path, file_status status = file_status{},
+            directory_entry( path const & p, file_status stat = file_status{},
                 file_status symlink_status = file_status{} );
             ~directory_entry() = default;
 
@@ -102,8 +105,8 @@ namespace tinydircpp {
 
         private:
             file_path path_;
-            file_status status_;
-            file_status symlink_status_;
+            mutable file_status status_;
+            mutable file_status symlink_status_;
         };
 
         class directory_iterator: public std::iterator<std::input_iterator_tag, directory_entry>
@@ -136,11 +139,13 @@ namespace tinydircpp {
         void current_path( path const & p );
         void current_path( path const & p, std::error_code & ec )noexcept;
 
-        path absolute( path const & p, path const & base_path = current_path() );
-
-        //path canonical( path const & p, path const & base = current_path() );
-       // path canonical( path const & p, std::error_code & ec ) noexcept;
-        //path canonical( path const & p, path const & base, std::error_code & ec ) noexcept;
+        path abspath( path const & p );
+        
+        path basename( path const & p );
+        path common_prefix( std::vector<path> const & paths );
+        path common_path( std::vector<path> const & paths );
+        path directory_name( path const & p );
+        path get_home_path();
 
         void copy( path const & from, path const & to );
         void copy( path const & from, path const & to, std::error_code & ec ) noexcept;
@@ -221,9 +226,22 @@ namespace tinydircpp {
         file_time_type last_write_time( path const & p );
         file_time_type last_write_time( path const & p, std::error_code & ec ) noexcept;
 
-        void last_write_time( path const & p, file_time_type new_time );
-        void last_write_time( path const & p, file_time_type new_time, std::error_code & ec ) noexcept;
+        void set_last_write_time( path const & p, file_time_type new_time );
+        void set_last_write_time( path const & p, file_time_type new_time, std::error_code & ec ) noexcept;
 
+        file_time_type last_access_time( path const & p );
+        file_time_type last_access_time( path const & p, std::error_code & ec ) noexcept;
+        void set_last_access_time( path const & p, file_time_type new_time );
+        void set_last_access_time( path const & p, file_time_type new_time, std::error_code & ec ) noexcept;
+
+        file_time_type creation_time( path const & p );
+        file_time_type creation_time( path const & p, std::error_code & ec ) noexcept;
+        void set_creation_time( path const & p, file_time_type new_time );
+        void set_creation_time( path const & p, file_time_type new_time, std::error_code & ec ) noexcept;
+
+        bool is_relative_path( path const & p );
+        bool is_abs( path const & p );
+        
         //void permissions( path const & p, perms perm );
         //void permissions( path const & p, perms perm, std::error_code & ec ) noexcept;
 
