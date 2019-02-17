@@ -93,6 +93,24 @@ namespace tinydircpp
             return std::error_code( static_cast< int >( code ), std::generic_category() );
         }
 
+        file_time_type fstime_to_stdtime( filesystem_time const & time ) noexcept(false)
+        {
+            LPSYSTEMTIME const lp_systime = ( LPSYSTEMTIME ) &time;
+            FILETIME filetime{};
+            if ( SystemTimeToFileTime( lp_systime, &filetime ) == 0 ) 
+                throw std::runtime_error( details::get_windows_error( GetLastError() ) );
+            return details::Win32FiletimeToChronoTime( filetime );
+        }
+
+        filesystem_time stdtime_to_fstime( file_time_type const & time ) noexcept( false )
+        {
+            auto const result = details::ChronoTimeToWin32Filetime( time );
+            SYSTEMTIME sys_time{};
+            if ( FileTimeToSystemTime( &result, &sys_time ) == 0 )
+                throw std::runtime_error( details::get_windows_error( GetLastError() ) );
+            return *( filesystem_time* ) &sys_time;
+        }
+
         namespace details
         {
             std::string get_windows_error( DWORD error_code )
@@ -114,17 +132,18 @@ namespace tinydircpp
                 ULARGE_INTEGER ll_now{};
                 ll_now.LowPart = pFiletime.dwLowDateTime;
                 ll_now.HighPart = pFiletime.dwHighDateTime;
-                std::time_t const epoch_time = ll_now.QuadPart / 10'000'000 - 11'644'473'600U;
+                std::time_t const epoch_time = (ll_now.QuadPart / 10'000'000) - 11'644'473'600U;
                 return std::chrono::system_clock::from_time_t( epoch_time );
             }
 
             FILETIME ChronoTimeToWin32Filetime( file_time_type const & ftt )
             {
-                ULONGLONG const unix_epoch_time = ftt.time_since_epoch().count();
+                auto const unix_epoch_time = std::chrono::system_clock::to_time_t( ftt );
                 ULARGE_INTEGER ll_now{};
                 ll_now.QuadPart = 10'000'000 * ( unix_epoch_time + 11'644'473'600U );
                 return FILETIME{ ll_now.LowPart, ll_now.HighPart };
             }
+
             void convert_to( str_t<wchar_t> const & from, str_t<char32_t> & to )
             {
                 std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t> converter{};

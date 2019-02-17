@@ -66,12 +66,7 @@ TEST_CASE( "Testing tinydircpp::fs free functions", "Success and failures" )
     }
 
     SECTION( "Testing fs::common_path" ) {
-        std::vector<path> paths{};
-        paths.push_back( path_1 ); 
-        paths.push_back( symlink_path );
-        paths.push_back( cpp_file_path );
-        paths.push_back( system_file_path );
-        paths.push_back( the_this );
+        std::vector<path> const paths{ path_1, symlink_path, cpp_file_path, system_file_path, the_this };
 
         auto const common_p = fs::common_path( paths );
         REQUIRE( common_p.wstring() == L"C:\\" );
@@ -87,5 +82,11 @@ TEST_CASE( "Testing tinydircpp::fs free functions", "Success and failures" )
         REQUIRE( fs::is_abs( the_this ) );
         REQUIRE( fs::is_abs( rel_dir_path ) );
         REQUIRE( !fs::is_abs( cpp_file_path ) );
+    }
+    SECTION( "testing read_symlink and abspath" ) {
+        path const xpath{ symlink_path };
+        auto const p = fs::read_symlink( xpath );
+        REQUIRE( fs::abspath( p ).native() == L"." );
+        REQUIRE( fs::is_abs( p ) );
     }
 }

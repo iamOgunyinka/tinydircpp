@@ -202,6 +202,19 @@ namespace tinydircpp
                 name_too_long( char const * error_message ) : std::runtime_error{ error_message }{}
             };
 
+            struct smart_handle {
+                smart_handle( HANDLE h ) : h_{ h } {}
+                ~smart_handle() {
+                    if( h_ != INVALID_HANDLE_VALUE ) CloseHandle( h_ );
+                }
+                operator bool() {
+                    return h_ != INVALID_HANDLE_VALUE;
+                }
+                operator HANDLE() { return h_; }
+            private:
+                HANDLE h_;
+            };
+
             std::string get_windows_error( DWORD error_code );
 
             file_time_type Win32FiletimeToChronoTime( FILETIME const &pFiletime );
@@ -324,6 +337,20 @@ namespace tinydircpp
                 } GenericReparseBuffer;
             };
         };
+        struct filesystem_time {
+            unsigned short year;
+            unsigned short month;
+            unsigned short day_of_week;
+            unsigned short day;
+            unsigned short hour;
+            unsigned short minute;
+            unsigned short second;
+            unsigned short milliseconds;
+        };
+
+        file_time_type fstime_to_stdtime( filesystem_time const & );
+        filesystem_time stdtime_to_fstime( file_time_type const & );
+
         enum class permissions_status : int {
             replace_bits = 0,
             add_bits = 1,

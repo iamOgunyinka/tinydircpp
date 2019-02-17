@@ -29,6 +29,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "tinydircpp.hpp"
 #include <system_error>
 #include <iostream>
+#include <tuple>
+
 #ifdef _WIN32
 #include <ShlObj.h>
 #endif // _WIN32
@@ -53,6 +55,11 @@ namespace tinydircpp {
             permission_ = prms;
         }
 
+        bool operator==( file_status stat1, file_status stat2 )
+        {
+            return stat1.ft_ == stat2.ft_ && stat2.permission_ == stat1.permission_;
+        }
+
         path current_path()
         {
             TCHAR file_path[ TINYDIR_FILENAME_MAX + 2 ] = {};
@@ -72,9 +79,8 @@ namespace tinydircpp {
 
         void current_path( path const & p )
         {
-            if ( SetCurrentDirectoryW( p.wstring().c_str() ) == 0 ) { // failed
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ),
-                    std::make_error_code( std::errc::no_such_file_or_directory ) };
+            if ( SetCurrentDirectoryW( p.c_str() ) == 0 ) { // failed
+                FSTHROW( std::errc::no_such_file_or_directory, p );
             }
         }
 
@@ -86,9 +92,8 @@ namespace tinydircpp {
         path abspath( path const & p )
         {
             TCHAR fullpath[ TINYDIR_PATH_MAX + TINYDIR_PATH_EXTRA ]{};
-            if ( GetFullPathNameW( p.wstring().c_str(), TINYDIR_PATH_MAX, fullpath, nullptr ) == 0 ) {
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ), p,
-                    fs::filesystem_error_codes::unknown_io_error };
+            if ( GetFullPathNameW( p.c_str(), TINYDIR_PATH_MAX, fullpath, nullptr ) == 0 ) {
+                FSTHROW_MANUAL( fs::filesystem_error_codes::unknown_io_error, p );
             }
             return path{ fullpath };
         }
@@ -126,21 +131,21 @@ namespace tinydircpp {
             return directory_name( common_prefix( paths ) );
         }
 
-        // to-do
         path get_home_path()
         {
             TCHAR home_path[ TINYDIR_PATH_MAX ]{};
             TCHAR home_drive[ TINYDIR_PATH_MAX ]{};
             //if these first two fails, we would still go ahead and check for other environment variables
             if ( GetEnvironmentVariableW( L"HOME", home_path, TINYDIR_PATH_MAX ) != 0 ) {
-                if ( GetEnvironmentVariableW( L"USERPROFILE", home_drive, TINYDIR_PATH_MAX ) != 0 ) {
-
-                }
+                return path{ home_path };
             }
+            if ( GetEnvironmentVariableW( L"USERPROFILE", home_drive, TINYDIR_PATH_MAX ) != 0 ) {
+                return path{ home_drive };
+            }
+
             if ( GetEnvironmentVariableW( L"HOMEPATH", home_path, TINYDIR_PATH_MAX ) == 0 ||
                 GetEnvironmentVariableW( L"HOMEDRIVE", home_drive, TINYDIR_PATH_MAX ) == 0 ) {
-                throw fs::filesystem_error( fs::details::get_windows_error( GetLastError() ),
-                    make_error_code( fs::filesystem_error_codes::directory_name_unobtainable ) );
+                FSTHROW_MANUAL( fs::filesystem_error_codes::directory_name_unobtainable, {} );
             }
             return path{ fs::str_t<TCHAR>{ home_drive } +home_path };
         }
@@ -156,10 +161,9 @@ namespace tinydircpp {
         void copy( path const & from, path const & to )
         {
             BOOL const fail_if_exists = true;
-            BOOL const copying_succeeded = CopyFileW( from.c_str(), to.wstring().c_str(), fail_if_exists );
+            BOOL const copying_succeeded = CopyFileW( from.c_str(), to.c_str(), fail_if_exists );
             if ( !copying_succeeded ) {
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ), from, to,
-                    fs::filesystem_error_codes::unknown_io_error };
+                FSTHROW_MANUAL_DPATH( fs::filesystem_error_codes::unknown_io_error, from, to );
             }
         }
 
@@ -181,11 +185,41 @@ namespace tinydircpp {
             return found;
         }
 
+        bool equivalent( path const & a, path const & b )
+        {
+            if ( ( !exists( a ) && !exists( b ) ) || ( is_other( a ) && is_other( b ) ) ) {
+                FSTHROW_DPATH( std::errc::no_such_file_or_directory, a, b );
+            }
+            details::smart_handle a_file_handle{ CreateFileW( a.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL, nullptr ) };
+            details::smart_handle b_file_handle{ CreateFileW( b.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL, nullptr ) };
+            if ( !a_file_handle || !b_file_handle )
+                FSTHROW_MANUAL_DPATH( fs::filesystem_error_codes::handle_not_opened, a, b );
+            BY_HANDLE_FILE_INFORMATION a_info{}, b_info{};
+
+            if ( GetFileInformationByHandle( a_file_handle, &a_info ) == 0
+                || GetFileInformationByHandle( b_file_handle, &b_info ) == 0 ) {
+                FSTHROW_MANUAL_DPATH( fs::filesystem_error_codes::unknown_io_error, a, b );
+            }
+            auto tuple_getter = []( BY_HANDLE_FILE_INFORMATION const & info ) {
+                return std::tie( info.dwVolumeSerialNumber, info.nFileIndexLow, info.nFileIndexHigh,
+                    info.nFileSizeLow, info.nFileSizeHigh, info.ftLastWriteTime.dwLowDateTime,
+                    info.ftLastWriteTime.dwHighDateTime );
+            };
+            return status( a ) == status( b ) && ( tuple_getter( a_info ) == tuple_getter( b_info ) );
+        }
+
+        bool equivalent( path const & a, path const & b, std::error_code & ec ) noexcept
+        {
+            FSERROR_TRY_CATCH( return equivalent( a, b ), ec );
+            return false;
+        }
+
         void create_hard_link( path const & to, path const & new_hardlink )
         {
             if ( CreateHardLinkW( new_hardlink.c_str(), to.c_str(), nullptr ) == 0 ) {
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ),
-                to, new_hardlink, std::make_error_code( std::errc::no_link ) };
+                FSTHROW_DPATH( std::errc::no_link, to, new_hardlink );
             }
         }
 
@@ -196,13 +230,12 @@ namespace tinydircpp {
 
         void create_directory( path const & p, path const & existing_path )
         {
-            if ( CreateDirectoryExW( existing_path.c_str(), p.wstring().c_str(), 0 ) == 0 ) {
+            if ( CreateDirectoryExW( existing_path.c_str(), p.c_str(), 0 ) == 0 ) {
                 DWORD const last_error = GetLastError();
                 if ( last_error == ERROR_ALREADY_EXISTS ) {
                     return; // not an error
                 }
-                throw fs::filesystem_error{ fs::details::get_windows_error( last_error ), p, existing_path,
-                    std::error_code( fs::filesystem_error_codes::unknown_io_error ) };
+                FSTHROW_MANUAL_DPATH( fs::filesystem_error_codes::unknown_io_error, p, existing_path );
             }
         }
 
@@ -214,10 +247,8 @@ namespace tinydircpp {
         bool create_directory_symlink( path const & to, path const & new_symlink )
         {
             if ( !is_directory( new_symlink ) ) return false;
-            if ( CreateSymbolicLinkW( new_symlink.c_str(), to.wstring().c_str(),
-                SYMBOLIC_LINK_FLAG_DIRECTORY ) == 0 ) {
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ),
-                    std::make_error_code( std::errc::no_link ) };
+            if ( CreateSymbolicLinkW( new_symlink.c_str(), to.c_str(), SYMBOLIC_LINK_FLAG_DIRECTORY ) == 0 ) {
+                FSTHROW_DPATH( std::errc::no_link, to, new_symlink );
             }
             return true;
         }
@@ -233,9 +264,8 @@ namespace tinydircpp {
             if ( !is_regular_file( new_symlink ) ) {
                 throw;
             }
-            if ( CreateSymbolicLinkW( new_symlink.c_str(), to.wstring().c_str(), 0 ) == 0 ) {
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ),
-                    std::make_error_code( std::errc::no_link ) };
+            if ( CreateSymbolicLinkW( new_symlink.c_str(), to.c_str(), 0 ) == 0 ) {
+                FSTHROW_DPATH( std::errc::no_link, to, new_symlink );
             }
         }
 
@@ -252,20 +282,15 @@ namespace tinydircpp {
         {
             if ( !exists( p ) || !is_regular_file( p ) ) return static_cast< std::uintmax_t >( -1 );
 
-            HANDLE file_handle = CreateFileW( p.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
-                FILE_ATTRIBUTE_NORMAL, nullptr );
-            if ( file_handle == INVALID_HANDLE_VALUE ) { // handle was not opened here, no need for cleanup
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ),
-                    std::error_code( fs::filesystem_error_codes::handle_not_opened ) };
+            details::smart_handle file_handle{ CreateFileW( p.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr ) };
+            if ( !file_handle ) {
+                FSTHROW_MANUAL( fs::filesystem_error_codes::handle_not_opened, p );
             }
             LARGE_INTEGER sizeof_file{};
-            BOOL const size_retrieval_succeeds = GetFileSizeEx( file_handle, &sizeof_file );
-            if ( size_retrieval_succeeds == 0 ) {
-                CloseHandle( file_handle );
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ),
-                std::error_code( fs::filesystem_error_codes::could_not_obtain_size ) };
+            if ( GetFileSizeEx( file_handle, &sizeof_file ) == 0 ) {
+                FSTHROW_MANUAL( fs::filesystem_error_codes::could_not_obtain_size, p );
             }
-            CloseHandle( file_handle );
             return sizeof_file.QuadPart;
         }
 
@@ -278,19 +303,13 @@ namespace tinydircpp {
 
         std::uintmax_t hard_link_count( path const & p )
         {
-            HANDLE h = CreateFileW( p.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
-                FILE_ATTRIBUTE_NORMAL, nullptr );
-            if ( h == INVALID_HANDLE_VALUE ) {
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ),
-                    fs::filesystem_error_codes::handle_not_opened };
-            }
+            details::smart_handle h{ CreateFileW( p.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL, nullptr ) };
+            if ( !h ) FSTHROW_MANUAL( fs::filesystem_error_codes::handle_not_opened, p );
             BY_HANDLE_FILE_INFORMATION file_information{};
             if ( GetFileInformationByHandle( h, ( LPBY_HANDLE_FILE_INFORMATION ) &file_information ) == 0 ) {
-                CloseHandle( h );
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ),
-                    fs::filesystem_error_codes::hardlink_count_error };
+                FSTHROW_MANUAL( fs::filesystem_error_codes::hardlink_count_error, p );
             }
-            CloseHandle( h );
             return file_information.nNumberOfLinks;
         }
 
@@ -303,6 +322,22 @@ namespace tinydircpp {
         bool is_regular_file( path const & p )
         {
             return is_regular_file( status( p ) );
+        }
+
+        bool is_other( file_status s ) noexcept
+        {
+            return exists( s ) && !is_regular_file( s ) && !is_directory( s ) && !is_symlink( s );
+        }
+
+        bool is_other( path const & p )
+        {
+            return is_other( status( p  ));
+        }
+
+        bool is_other( path const & p, std::error_code & ec ) noexcept
+        {
+            FSERROR_TRY_CATCH( return is_other( p ), ec );
+            return true;
         }
 
         bool is_regular_file( file_status status ) noexcept
@@ -372,7 +407,7 @@ namespace tinydircpp {
             ec.clear();
             if ( file_attrib & FILE_ATTRIBUTE_REPARSE_POINT ) {
                 WIN32_FIND_DATAW find_data{};
-                HANDLE symlink_handle = FindFirstFileW( p.c_str(), &find_data );
+                HANDLE symlink_handle = FindFirstFileW( p.c_str(), &find_data ); // not destructible by CloseHandle
                 if ( symlink_handle == INVALID_HANDLE_VALUE ) {
                     ec = std::error_code( fs::filesystem_error_codes::handle_not_opened );
                     return file_status{ file_type::unknown };
@@ -412,8 +447,7 @@ namespace tinydircpp {
             TCHAR temp_path[ TINYDIR_PATH_MAX + 2 ]{};
             DWORD path_length = GetTempPathW( TINYDIR_PATH_MAX, ( LPTSTR ) temp_path );
             if ( path_length == 0 ) {
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ),
-                std::make_error_code( std::errc::filename_too_long ) };
+                FSTHROW( std::errc::filename_too_long, {} );
             }
             else if ( path_length > TINYDIR_PATH_MAX ) { // rare, but this is my fault, didn't allocate enough space
                 std::string new_path( path_length, ' ' );
@@ -442,6 +476,7 @@ namespace tinydircpp {
         {
             FSERROR_TRY_CATCH( create_symlink( read_symlink( existing_symlink, ec ), new_symlink, ec ), ec );
         }
+
         bool create_directories( path const & p )
         {
             int const result = SHCreateDirectoryExW( nullptr, p.c_str(), nullptr );
@@ -451,20 +486,16 @@ namespace tinydircpp {
             case ERROR_ALREADY_EXISTS:
                 return true;
             case ERROR_FILENAME_EXCED_RANGE:
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ), p,
-                    std::make_error_code( std::errc::filename_too_long ) };
+                FSTHROW( std::errc::filename_too_long, p );
                 break;
             case ERROR_PATH_NOT_FOUND:
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ), p,
-                    std::make_error_code( std::errc::no_such_file_or_directory ) };
+                FSTHROW( std::errc::no_such_file_or_directory, p );
                 break;
             case ERROR_CANCELLED:
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ), p,
-                    std::make_error_code( std::errc::operation_canceled ) };
+                FSTHROW( std::errc::operation_canceled, p );
                 break;
             default:
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ), p,
-                    std::error_code( fs::filesystem_error_codes::unknown_io_error ) };
+                FSTHROW_MANUAL( fs::filesystem_error_codes::unknown_io_error, p );
             }
         }
 
@@ -494,8 +525,7 @@ namespace tinydircpp {
             TCHAR const *fp_path = p.c_str();
             WIN32_FILE_ATTRIBUTE_DATA file_data{};
             if ( GetFileAttributesExW( fp_path, GetFileExInfoStandard, &file_data ) == 0 ) {
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ), p,
-                    std::error_code( fs::filesystem_error_codes::could_not_obtain_time ) };
+                FSTHROW_MANUAL( fs::filesystem_error_codes::could_not_obtain_time , p );
             }
             return fs::details::Win32FiletimeToChronoTime( file_data.ftLastWriteTime );
         }
@@ -508,16 +538,14 @@ namespace tinydircpp {
 
         void set_last_write_time( path const & p, file_time_type new_time )
         {
-            HANDLE file_handle = CreateFileW( p.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
-                nullptr, OPEN_EXISTING, FILE_WRITE_ATTRIBUTES | FILE_ATTRIBUTE_NORMAL, nullptr );
-            if ( file_handle == INVALID_HANDLE_VALUE ) {
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ), p,
-                    std::error_code( fs::filesystem_error_codes::handle_not_opened ) };
+            details::smart_handle file_handle{ CreateFileW( p.c_str(), GENERIC_WRITE, 0,
+                nullptr, OPEN_EXISTING, FILE_WRITE_ATTRIBUTES | FILE_ATTRIBUTE_NORMAL, nullptr ) };
+            if ( !file_handle ) {
+                FSTHROW_MANUAL( fs::filesystem_error_codes::handle_not_opened, p );
             }
             FILETIME const win32_filetime = fs::details::ChronoTimeToWin32Filetime( new_time );
             if ( SetFileTime( file_handle, nullptr, nullptr, &win32_filetime ) == 0 ) {
-                CloseHandle( file_handle );
-                FSTHROW_MANUAL( fs::filesystem_error_codes::set_filetime_error );
+                FSTHROW_MANUAL( fs::filesystem_error_codes::set_filetime_error, p );
             }
         }
 
@@ -530,8 +558,7 @@ namespace tinydircpp {
         {
             WIN32_FILE_ATTRIBUTE_DATA file_metadata{};
             if ( GetFileAttributesExW( p.c_str(), GetFileExInfoStandard, &file_metadata ) == 0 ) {
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ), p,
-                    std::error_code( fs::filesystem_error_codes::could_not_obtain_time ) };
+                FSTHROW_MANUAL( fs::filesystem_error_codes::could_not_obtain_time, p );
             }
             return details::Win32FiletimeToChronoTime( file_metadata.ftLastAccessTime );
         }
@@ -544,15 +571,14 @@ namespace tinydircpp {
 
         void set_last_access_time( path const & p, file_time_type new_time )
         {
-            HANDLE file_handle = CreateFile( p.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
-                FILE_ATTRIBUTE_NORMAL, nullptr );
-            if ( file_handle == INVALID_HANDLE_VALUE ) {
-                FSTHROW_MANUAL( fs::filesystem_error_codes::handle_not_opened );
+            details::smart_handle file_handle{ CreateFileW( p.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
+                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr ) };
+            if ( !file_handle ) {
+                FSTHROW_MANUAL( fs::filesystem_error_codes::handle_not_opened, p );
             }
             auto const access_time = details::ChronoTimeToWin32Filetime( new_time );
             if ( SetFileTime( file_handle, nullptr, &access_time, nullptr ) == 0 ) {
-                CloseHandle( file_handle );
-                FSTHROW_MANUAL( fs::filesystem_error_codes::set_filetime_error );
+                FSTHROW_MANUAL( fs::filesystem_error_codes::set_filetime_error, p );
             }
         }
 
@@ -565,7 +591,7 @@ namespace tinydircpp {
         {
             WIN32_FILE_ATTRIBUTE_DATA file_data{};
             if ( GetFileAttributesExW( p.c_str(), GetFileExInfoStandard, &file_data ) == 0 ) {
-                FSTHROW_MANUAL( fs::filesystem_error_codes::could_not_obtain_time );
+                FSTHROW_MANUAL( fs::filesystem_error_codes::could_not_obtain_time, p );
             }
             return fs::details::Win32FiletimeToChronoTime( file_data.ftCreationTime );
         }
@@ -578,15 +604,14 @@ namespace tinydircpp {
 
         void set_creation_time( path const & p, file_time_type new_time )
         {
-            HANDLE file_handle = CreateFile( p.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
-                FILE_ATTRIBUTE_NORMAL, nullptr );
-            if ( file_handle == INVALID_HANDLE_VALUE ) {
-                FSTHROW_MANUAL( fs::filesystem_error_codes::handle_not_opened );
+            details::smart_handle file_handle{ CreateFileW( p.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
+                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr ) };
+            if ( !file_handle ) {
+                FSTHROW_MANUAL( fs::filesystem_error_codes::handle_not_opened, p );
             }
             auto const creation_time = details::ChronoTimeToWin32Filetime( new_time );
             if ( SetFileTime( file_handle, &creation_time, nullptr, nullptr ) == 0 ) {
-                CloseHandle( file_handle );
-                FSTHROW_MANUAL( fs::filesystem_error_codes::set_filetime_error );
+                FSTHROW_MANUAL( fs::filesystem_error_codes::set_filetime_error, p );
             }
         }
 
@@ -616,11 +641,10 @@ namespace tinydircpp {
         {
             if ( !is_symlink( p ) ) return path{};
 
-            HANDLE h = CreateFileW( p.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING,
-                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr );
-            if ( h == INVALID_HANDLE_VALUE ) {
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ), p,
-                    std::error_code( fs::filesystem_error_codes::handle_not_opened ) };
+            details::smart_handle h{ CreateFileW( p.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr ) };
+            if ( !h ) {
+                FSTHROW_MANUAL( fs::filesystem_error_codes::handle_not_opened ,p );
             }
             DWORD returned_data_size = 0;
 
@@ -630,11 +654,8 @@ namespace tinydircpp {
             } ai; // borrowed from boost::filesystem
             if ( DeviceIoControl( h, FSCTL_GET_REPARSE_POINT, nullptr, 0, &ai.reparse_buffer, sizeof( anon_info ),
                 &returned_data_size, nullptr ) == 0 ) {
-                CloseHandle( h );
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ), p,
-                    std::error_code( fs::filesystem_error_codes::unknown_io_error ) };
+                FSTHROW_MANUAL( fs::filesystem_error_codes::unknown_io_error, p );
             }
-            CloseHandle( h );
             std::wstring target_name{ static_cast< TCHAR* >( ai.reparse_buffer.SymbolicLinkReparseBuffer.PathBuffer )
                 + ai.reparse_buffer.SymbolicLinkReparseBuffer.PrintNameOffset / 2,
                 static_cast< TCHAR* >( ai.reparse_buffer.SymbolicLinkReparseBuffer.PathBuffer )
@@ -651,18 +672,14 @@ namespace tinydircpp {
 
         void resize_file( path const & p, std::uintmax_t new_size )
         {
-            HANDLE file_handle = CreateFileW( p.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ,
-                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr );
-            if ( file_handle == INVALID_HANDLE_VALUE ) {
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ), p,
-                    std::error_code( fs::filesystem_error_codes::handle_not_opened ) };
+            details::smart_handle file_handle{ CreateFileW( p.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ,
+                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr ) };
+            if ( !file_handle ) {
+                FSTHROW_MANUAL( fs::filesystem_error_codes::handle_not_opened, p );
             }
             if ( SetFilePointer( file_handle, ( LONG ) new_size, nullptr, FILE_BEGIN ) == INVALID_SET_FILE_POINTER ) {
-                CloseHandle( file_handle );
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ), p,
-                    std::error_code( fs::filesystem_error_codes::invalid_set_file_pointer ) };
+                FSTHROW_MANUAL( fs::filesystem_error_codes::invalid_set_file_pointer ,p );
             }
-            CloseHandle( file_handle );
         }
 
         void resize_file( path const & p, std::uintmax_t new_size, std::error_code & ec ) noexcept
@@ -673,18 +690,15 @@ namespace tinydircpp {
         space_info space( path const & p )
         {
             TCHAR const *directory_name = p.c_str();
-            HANDLE disk_handle = CreateFileW( directory_name, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                OPEN_EXISTING, 0, nullptr );
-            if ( disk_handle == INVALID_HANDLE_VALUE ) {
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ), p,
-                    std::error_code( fs::filesystem_error_codes::handle_not_opened ) };
+            details::smart_handle disk_handle{ CreateFileW( directory_name, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, 
+                nullptr, OPEN_EXISTING, 0, nullptr ) };
+            if ( !disk_handle ) {
+                FSTHROW_MANUAL( fs::filesystem_error_codes::handle_not_opened, p );
             }
             ULARGE_INTEGER free_bytes_available_to_caller{}, total_bytes{}, total_free_bytes{};
             if ( GetDiskFreeSpaceExW( directory_name, &free_bytes_available_to_caller,
-                &total_bytes, &total_free_bytes ) == 0 )
-            {
-                throw fs::filesystem_error{ fs::details::get_windows_error( GetLastError() ), p,
-                    std::error_code( fs::filesystem_error_codes::could_not_obtain_size ) };
+                &total_bytes, &total_free_bytes ) == 0 ){
+                FSTHROW_MANUAL( fs::filesystem_error_codes::could_not_obtain_size , p );
             }
             fs::space_info disk_space_info{};
             disk_space_info.free = total_free_bytes.QuadPart;

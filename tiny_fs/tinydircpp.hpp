@@ -52,11 +52,14 @@ constexpr unsigned int TINYDIR_FILENAME_MAX = 256;
 
 #define FSERROR_TRY_CATCH(throwing_code,catcher) try{ throwing_code; }\
     catch(fs::filesystem_error const & e){ catcher = e.code(); }
-#define FSTHROW_MANUAL(enum_code) throw fs::filesystem_error{ \
-    fs::details::get_windows_error( GetLastError() ), p, std::error_code( enum_code )}
-#define FSTHROW(enum_code) throw fs::filesystem_error{ \
-    fs::details::get_windows_error( GetLastError() ), p, std::make_error_code(enum_code)}
-
+#define FSTHROW_MANUAL(enum_code, path1) throw fs::filesystem_error{ \
+    fs::details::get_windows_error( GetLastError() ), path1, std::error_code( enum_code )}
+#define FSTHROW_MANUAL_DPATH(enum_code, path1, path2) throw fs::filesystem_error{ \
+    fs::details::get_windows_error( GetLastError() ), path1, path2, make_error_code(enum_code)}
+#define FSTHROW(enum_code, path1) throw fs::filesystem_error{ \
+    fs::details::get_windows_error( GetLastError() ), path1, std::make_error_code(enum_code)}
+#define FSTHROW_DPATH(enum_code, path1, path2) throw fs::filesystem_error{ \
+    fs::details::get_windows_error( GetLastError() ), path1, path2, std::make_error_code(enum_code)}
 
 namespace tinydircpp {
     namespace fs
@@ -72,6 +75,7 @@ namespace tinydircpp {
             void type( file_type ) noexcept;
             perms permission() const noexcept { return permission_; }
             void  permission( perms ) noexcept;
+            friend bool operator==( file_status, file_status );
         private:
             file_type ft_;
             perms permission_;
@@ -149,14 +153,7 @@ namespace tinydircpp {
 
         void copy( path const & from, path const & to );
         void copy( path const & from, path const & to, std::error_code & ec ) noexcept;
-        //bool copy( path const & from, path const & to, copy_options options );
-        //bool copy( path const & from, path const & to, copy_options options, std::error_code & ec ) noexcept;
-
-        //void copy_file( path const & from, path const & to );
-        //void copy_file( path const & from, path const & to, std::error_code & ec ) noexcept;
-       // void copy_file( path const & from, path const & to, copy_options options );
-        //void copy_file( path const & from, path const & to, copy_options options, std::error_code & ec ) noexcept;
-
+        
         void copy_symlink( path const & existing_symlink, path const & new_symlink );
         void copy_symlink( path const & existing_symlink, path const & new_symlink, std::error_code & ec ) noexcept;
 
@@ -179,8 +176,8 @@ namespace tinydircpp {
         bool exists( path const & p );
         bool exists( path const & p, std::error_code & ec ) noexcept;
 
-        //bool equivalent( path const & a, path const & b );
-        //bool equivalent( path const & a, path const & b, std::error_code & ec ) noexcept;
+        bool equivalent( path const & a, path const & b );
+        bool equivalent( path const & a, path const & b, std::error_code & ec ) noexcept;
 
         std::uintmax_t file_size( path const & p );
         std::uintmax_t file_size( path const & p, std::error_code & ec ) noexcept;
@@ -206,11 +203,11 @@ namespace tinydircpp {
         /*bool is_fifo( file_status s ) noexcept;
         bool is_fifo( path const & p );
         bool is_fifo( path const & p, std::error_code & ec ) noexcept;
-
+        */
         bool is_other( file_status s ) noexcept;
         bool is_other( path const & p );
         bool is_other( path const & p, std::error_code & ec ) noexcept;
-*/
+
         bool is_regular_file( file_status s ) noexcept;
         bool is_regular_file( path const & p );
         bool is_regular_file( path const & p, std::error_code & ec ) noexcept;
