@@ -32,7 +32,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <locale>
 #include <type_traits>
 #include <cstdlib>
-
+#include <algorithm>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -78,7 +78,7 @@ namespace tinydircpp
         class path {
         public:
             using value_type = wchar_t;
-            using string_type = typename str_t<value_type>;
+            using string_type = str_t<value_type>;
         public:
 
             path() = default;
@@ -118,22 +118,28 @@ namespace tinydircpp
                 *this = path{ beg, end };
                 return *this;
             }
-            void clear() noexcept {
+            void clear() noexcept
+            {
                 pathname_.clear();
             }
 
+            friend path operator/( path const & p, path const & rel_path );
             path& operator/=( path const & p );
-            bool operator<( path const & p ) {
+            bool operator<( path const & p ) const
+            {
                 return pathname_ < p.pathname_;
             }
-            bool operator>( path const & p ) {
+            bool operator>( path const & p ) const
+            {
                 return pathname_ > p.pathname_;
             }
 
-            bool operator<=( path const & p ) {
+            bool operator<=( path const & p ) const
+            {
                 return pathname_ <= p.pathname_;
             }
-            bool operator>=( path const & p ) {
+            bool operator>=( path const & p ) const
+            {
                 return pathname_ >= p.pathname_;
             }
             /*
@@ -152,22 +158,31 @@ namespace tinydircpp
             path extension() const;
             path filename() const;
 
+            operator string_type()
+            {
+                return pathname_;
+            }
+
             std::u32string u32string() const;
             std::u16string u16string() const;
             std::wstring wstring() const;
             std::string string() const;
 
-            bool empty() const {
+            bool empty() const
+            {
                 return pathname_.empty();
             }
 
-            string_type const & native() const noexcept {
+            string_type const & native() const noexcept
+            {
                 return pathname_;
             }
-            value_type const * c_str() const noexcept {
+            value_type const * c_str() const noexcept
+            {
                 return pathname_.c_str();
             }
-            operator string_type() const {
+            operator string_type() const
+            {
                 return pathname_;
             }
             /*
@@ -177,7 +192,7 @@ namespace tinydircpp
             bool is_absolute() const;
             bool is_relative() const; */
         private:
-            str_t<value_type> pathname_; // basic-string
+            str_t<value_type> pathname_ {}; // basic-string
         };
 
         enum class filesystem_error_codes
@@ -189,7 +204,9 @@ namespace tinydircpp
             could_not_obtain_time,
             hardlink_count_error,
             invalid_set_file_pointer,
-            set_filetime_error
+            set_filetime_error,
+            no_link,
+            operation_cancelled
         };
 
         std::error_code make_error_code( filesystem_error_codes code );
@@ -204,10 +221,17 @@ namespace tinydircpp
 
             struct smart_handle {
                 smart_handle( HANDLE h ) : h_{ h } {}
-                ~smart_handle() {
-                    if( h_ != INVALID_HANDLE_VALUE ) CloseHandle( h_ );
+                smart_handle( smart_handle const & ) = delete;
+                smart_handle( smart_handle && ) = delete;
+                smart_handle& operator=( smart_handle const & ) = delete;
+                smart_handle& operator=( smart_handle && ) = delete;
+
+                ~smart_handle()
+                {
+                    if ( h_ != INVALID_HANDLE_VALUE ) CloseHandle( h_ );
                 }
-                operator bool() {
+                operator bool()
+                {
                     return h_ != INVALID_HANDLE_VALUE;
                 }
                 operator HANDLE() { return h_; }
@@ -250,7 +274,9 @@ namespace tinydircpp
         public:
             filesystem_error( std::string const & what, std::error_code ec ) : filesystem_error{ what, {}, ec } {}
             filesystem_error( std::string const & what, path const & p, std::error_code ec ) :
-                filesystem_error{ what, p, {}, ec } {}
+                filesystem_error{ what, p, {}, ec }
+            {
+            }
             filesystem_error( std::string const & what, path const & p1, path const & p2, std::error_code ec ) :
                 std::system_error{ ec, what }, first_path{ p1 }, second_path{ p2 }{}
 

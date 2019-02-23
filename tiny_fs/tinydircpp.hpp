@@ -29,6 +29,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string>
 #include <algorithm>
 #include <vector>
+#include <memory>
+
 #include "utilities.hpp"
 
 //According to the msdn documentation, _WIN32 is defined for both 32- and 64bit machines
@@ -75,7 +77,7 @@ namespace tinydircpp {
             void type( file_type ) noexcept;
             perms permission() const noexcept { return permission_; }
             void  permission( perms ) noexcept;
-            friend bool operator==( file_status, file_status );
+            friend bool operator==( file_status const &, file_status const & );
         private:
             file_type ft_;
             perms permission_;
@@ -99,44 +101,42 @@ namespace tinydircpp {
             file_path path() const noexcept;
             file_status status() const noexcept;
             file_status symlink_status() const;
-            
-            bool operator<( directory_entry const & );
-            bool operator<=( directory_entry const & );
-            bool operator==( directory_entry const & );
-            bool operator!=( directory_entry const & );
-            bool operator>( directory_entry const & );
-            bool operator>=( directory_entry const & );
+
+            bool operator<( directory_entry const & ) const;
+            bool operator<=( directory_entry const & ) const;
+            bool operator==( directory_entry const & ) const;
+            bool operator!=( directory_entry const & ) const;
+            bool operator>( directory_entry const & ) const;
+            bool operator>=( directory_entry const & ) const;
 
         private:
-            file_path path_;
-            mutable file_status status_;
-            mutable file_status symlink_status_;
+            file_path path_ {};
+            mutable file_status status_ {};
+            mutable file_status symlink_status_ {};
         };
 
-        class directory_iterator: public std::iterator<std::input_iterator_tag, directory_entry>
+        class directory_iterator : public std::iterator<std::input_iterator_tag, directory_entry>
         {
+            //std::error_code error_code{};
+            path full_path{};
+            mutable directory_entry entry{};
+            HANDLE search_handle{ INVALID_HANDLE_VALUE };
         public:
-            directory_iterator() noexcept;
+            directory_iterator() = default;
             directory_iterator( path const & p ) noexcept;
-            directory_iterator( path const & p, std::error_code & ec ) noexcept;
-            directory_iterator( directory_iterator const & ) noexcept = default;
-            directory_iterator( directory_iterator && ) noexcept = default;
-            ~directory_iterator() noexcept = default;
-
-            directory_iterator& operator++();
-            directory_iterator& operator++( int );
-            directory_iterator const& operator*() const;
-            directory_iterator const* operator->() const;
-
+            directory_iterator( path const & p, std::error_code & ec ) noexcept : directory_iterator{ p }{}
+            
+            directory_entry const & operator*() const;
             // directory_iterator must satisfy the requirements for input iterator
-            bool operator==( directory_iterator const & ); // must EqualityComparable
-            operator bool() const; // implicitly convertible to bool
-            directory_iterator& begin();
-            directory_iterator& end();
-            directory_iterator& cbegin() const;
-            directory_iterator& cend() const;
+            bool operator==( directory_iterator const & iter ) const;
+            bool operator!= ( directory_iterator const & iter ) const;
+            directory_iterator& operator++();
+            directory_iterator& begin() noexcept;
+            directory_iterator end() noexcept;
+            directory_iterator const & cbegin() const;
+            directory_iterator const cend() const;
         };
-        
+
         path current_path();
         path current_path( std::error_code & ec ) noexcept;
 
@@ -144,16 +144,40 @@ namespace tinydircpp {
         void current_path( path const & p, std::error_code & ec )noexcept;
 
         path abspath( path const & p );
-        
         path basename( path const & p );
-        path common_prefix( std::vector<path> const & paths );
-        path common_path( std::vector<path> const & paths );
+
+        template<typename Iterator, typename = typename
+            std::enable_if<std::is_same<typename std::iterator_traits<Iterator>::value_type, fs::path>::value>::type>
+            path common_prefix( Iterator beg, Iterator end )
+        {
+            if ( beg == end ) return path{};
+            path const shortest_address{ *std::min_element( beg, end, []( path const & p1, path const & p2 ) {
+                return p1.native().size() < p2.native().size(); } ) };
+            size_t counter = 0;
+            auto const shortest_filename = shortest_address.native();
+            for ( size_t i = 0; i != shortest_filename.size(); ++i ) {
+                for ( Iterator iter = beg; iter != end; ++iter ) {
+                    auto const &current_path = *iter;
+                    if ( shortest_filename[ i ] != current_path.native()[ i ] )
+                        return path{ shortest_filename.substr( 0, counter ) };
+                }
+                counter += 1;
+            }
+            return counter != shortest_filename.size() ? path{} : path{ shortest_filename.substr( 0, counter ) };
+        }
+
+        template<typename Iterator>
+        path common_path( Iterator begin, Iterator end )
+        {
+            return directory_name( common_prefix( begin, end ) );
+        }
+
         path directory_name( path const & p );
         path get_home_path();
 
         void copy( path const & from, path const & to );
         void copy( path const & from, path const & to, std::error_code & ec ) noexcept;
-        
+
         void copy_symlink( path const & existing_symlink, path const & new_symlink );
         void copy_symlink( path const & existing_symlink, path const & new_symlink, std::error_code & ec ) noexcept;
 
@@ -238,7 +262,7 @@ namespace tinydircpp {
 
         bool is_relative_path( path const & p );
         bool is_abs( path const & p );
-        
+
         //void permissions( path const & p, perms perm );
         //void permissions( path const & p, perms perm, std::error_code & ec ) noexcept;
 

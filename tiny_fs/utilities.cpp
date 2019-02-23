@@ -23,7 +23,7 @@ namespace tinydircpp
             this->pathname_ = std::move( p.pathname_ );
             return *this;
         }
-        path::path( std::wstring const & pathname ) : pathname_{pathname}
+        path::path( std::wstring const & pathname ) : pathname_{ pathname }
         {
         }
         path::path( std::u16string const & pathname ) : pathname_( pathname.begin(), pathname.end() )
@@ -38,14 +38,24 @@ namespace tinydircpp
         path::path( wchar_t const * pathname ) : pathname_{ pathname }
         {
         }
-        
+
         path & path::operator/=( path const & p )
         {
             if ( p.empty() ) return *this;
-            if ( !IS_DIR_SEPARATOR( *p.native().cbegin() ) && ( empty() && !IS_DIR_SEPARATOR( pathname_.back() ) ) ) {
-                pathname_ += WSLASH;
+            if ( pathname_.empty() && !p.empty() ) {
+                pathname_ = p.native();
+                return *this;
             }
-            pathname_ += p.native();
+
+            path::string_type& new_path_name = pathname_;
+            path::string_type rel_path_name = p.native();
+
+            if ( !IS_DIR_SEPARATORW( new_path_name.back() ) ) {
+                new_path_name += ( IS_DIR_SEPARATORW( rel_path_name.front() ) ? L"" : L"\\" ) + rel_path_name;
+            } else {
+                int const index = rel_path_name.find_first_not_of( L"\\." );
+                new_path_name += rel_path_name.substr( index, path::string_type::npos );
+            }
             return *this;
         }
 
@@ -89,15 +99,31 @@ namespace tinydircpp
             return temp;
         }
 
-        std::error_code make_error_code( filesystem_error_codes code ) {
+        path operator/( path const & p, path const & rel_path )
+        {
+            if ( p.empty() ) return rel_path;
+            if ( rel_path.empty() ) return p;
+
+            path::string_type new_path_name = p.native(), rel_path_name = rel_path.native();
+            if ( !IS_DIR_SEPARATORW( new_path_name.back() ) ) {
+                new_path_name += ( IS_DIR_SEPARATORW( rel_path_name.front() ) ? L"" : L"\\" ) + rel_path_name;
+            } else {
+                int const index = rel_path_name.find_first_not_of( L"\\." );
+                new_path_name += rel_path_name.substr( index, path::string_type::npos );
+            }
+            return path{ new_path_name };
+        }
+
+        std::error_code make_error_code( filesystem_error_codes code )
+        {
             return std::error_code( static_cast< int >( code ), std::generic_category() );
         }
 
-        file_time_type fstime_to_stdtime( filesystem_time const & time ) noexcept(false)
+        file_time_type fstime_to_stdtime( filesystem_time const & time ) noexcept( false )
         {
             LPSYSTEMTIME const lp_systime = ( LPSYSTEMTIME ) &time;
             FILETIME filetime{};
-            if ( SystemTimeToFileTime( lp_systime, &filetime ) == 0 ) 
+            if ( SystemTimeToFileTime( lp_systime, &filetime ) == 0 )
                 throw std::runtime_error( details::get_windows_error( GetLastError() ) );
             return details::Win32FiletimeToChronoTime( filetime );
         }
@@ -132,7 +158,7 @@ namespace tinydircpp
                 ULARGE_INTEGER ll_now{};
                 ll_now.LowPart = pFiletime.dwLowDateTime;
                 ll_now.HighPart = pFiletime.dwHighDateTime;
-                std::time_t const epoch_time = (ll_now.QuadPart / 10'000'000) - 11'644'473'600U;
+                std::time_t const epoch_time = ( ll_now.QuadPart / 10000000 ) - 11644473600U;
                 return std::chrono::system_clock::from_time_t( epoch_time );
             }
 
@@ -140,7 +166,7 @@ namespace tinydircpp
             {
                 auto const unix_epoch_time = std::chrono::system_clock::to_time_t( ftt );
                 ULARGE_INTEGER ll_now{};
-                ll_now.QuadPart = 10'000'000 * ( unix_epoch_time + 11'644'473'600U );
+                ll_now.QuadPart = 10000000 * ( unix_epoch_time + 11644473600U );
                 return FILETIME{ ll_now.LowPart, ll_now.HighPart };
             }
 
@@ -205,7 +231,8 @@ namespace tinydircpp
                 to = str_t<char32_t>( reinterpret_cast< char32_t const* >( result.data() ) );
             }
 
-            void convert_to( str_t<char> const &from, str_t<char> & to ) {
+            void convert_to( str_t<char> const &from, str_t<char> & to )
+            {
                 to = from;
             }
 

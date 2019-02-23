@@ -28,14 +28,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "tinydircpp.hpp"
 #include <system_error>
-#include <iostream>
 #include <tuple>
 
 #ifdef _WIN32
+#include <winbase.h>
 #include <ShlObj.h>
 #endif // _WIN32
-
-
 
 namespace tinydircpp {
     namespace fs {
@@ -55,14 +53,14 @@ namespace tinydircpp {
             permission_ = prms;
         }
 
-        bool operator==( file_status stat1, file_status stat2 )
+        bool operator==( file_status const & stat1, file_status const & stat2 )
         {
             return stat1.ft_ == stat2.ft_ && stat2.permission_ == stat1.permission_;
         }
 
         path current_path()
         {
-            TCHAR file_path[ TINYDIR_FILENAME_MAX + 2 ] = {};
+            wchar_t file_path[ TINYDIR_FILENAME_MAX + 2 ] = {};
             DWORD const len_current_directory{ GetCurrentDirectoryW( TINYDIR_FILENAME_MAX, file_path ) };
             if ( len_current_directory == 0 )
                 throw fs::filesystem_error( "Unable to get directory name", fs::filesystem_error_codes::directory_name_unobtainable );
@@ -91,7 +89,7 @@ namespace tinydircpp {
 
         path abspath( path const & p )
         {
-            TCHAR fullpath[ TINYDIR_PATH_MAX + TINYDIR_PATH_EXTRA ]{};
+            wchar_t fullpath[ TINYDIR_PATH_MAX + TINYDIR_PATH_EXTRA ]{};
             if ( GetFullPathNameW( p.c_str(), TINYDIR_PATH_MAX, fullpath, nullptr ) == 0 ) {
                 FSTHROW_MANUAL( fs::filesystem_error_codes::unknown_io_error, p );
             }
@@ -108,33 +106,10 @@ namespace tinydircpp {
             return p;
         }
 
-        path common_prefix( std::vector<path> const & paths )
-        {
-            if ( paths.empty() ) return path{};
-            path shortest_address{ *std::min_element( paths.begin(), paths.end(), []( path const & p1, path const & p2 ) {
-                return p1.native().size() < p2.native().size(); } ) };
-            size_t counter = 0;
-            auto const shortest_filename = shortest_address.native();
-            for ( size_t i = 0; i != shortest_filename.size(); ++i ) {
-                for ( std::vector<path>::size_type j = 0; j != paths.size(); ++j ) {
-                    auto const &current_path = paths[ j ];
-                    if ( shortest_filename[ i ] != current_path.native()[ i ] )
-                        return path{ shortest_filename.substr( 0, counter ) };
-                }
-                counter += 1;
-            }
-            return counter != shortest_filename.size() ? path{} : path{ shortest_filename.substr( 0, counter ) };
-        }
-
-        path common_path( std::vector<path> const & paths )
-        {
-            return directory_name( common_prefix( paths ) );
-        }
-
         path get_home_path()
         {
-            TCHAR home_path[ TINYDIR_PATH_MAX ]{};
-            TCHAR home_drive[ TINYDIR_PATH_MAX ]{};
+            wchar_t home_path[ TINYDIR_PATH_MAX ]{};
+            wchar_t home_drive[ TINYDIR_PATH_MAX ]{};
             //if these first two fails, we would still go ahead and check for other environment variables
             if ( GetEnvironmentVariableW( L"HOME", home_path, TINYDIR_PATH_MAX ) != 0 ) {
                 return path{ home_path };
@@ -147,7 +122,7 @@ namespace tinydircpp {
                 GetEnvironmentVariableW( L"HOMEDRIVE", home_drive, TINYDIR_PATH_MAX ) == 0 ) {
                 FSTHROW_MANUAL( fs::filesystem_error_codes::directory_name_unobtainable, {} );
             }
-            return path{ fs::str_t<TCHAR>{ home_drive } +home_path };
+            return path{ fs::str_t<wchar_t>{ home_drive } +home_path };
         }
 
         path directory_name( path const & p )
@@ -219,7 +194,7 @@ namespace tinydircpp {
         void create_hard_link( path const & to, path const & new_hardlink )
         {
             if ( CreateHardLinkW( new_hardlink.c_str(), to.c_str(), nullptr ) == 0 ) {
-                FSTHROW_DPATH( std::errc::no_link, to, new_hardlink );
+                FSTHROW_MANUAL_DPATH( fs::filesystem_error_codes::no_link, to, new_hardlink );
             }
         }
 
@@ -230,7 +205,7 @@ namespace tinydircpp {
 
         void create_directory( path const & p, path const & existing_path )
         {
-            if ( CreateDirectoryExW( existing_path.c_str(), p.c_str(), 0 ) == 0 ) {
+            if ( CreateDirectoryExW( existing_path.c_str(), p.c_str(), nullptr ) == 0 ) {
                 DWORD const last_error = GetLastError();
                 if ( last_error == ERROR_ALREADY_EXISTS ) {
                     return; // not an error
@@ -248,7 +223,7 @@ namespace tinydircpp {
         {
             if ( !is_directory( new_symlink ) ) return false;
             if ( CreateSymbolicLinkW( new_symlink.c_str(), to.c_str(), SYMBOLIC_LINK_FLAG_DIRECTORY ) == 0 ) {
-                FSTHROW_DPATH( std::errc::no_link, to, new_symlink );
+                FSTHROW_MANUAL_DPATH( fs::filesystem_error_codes::no_link, to, new_symlink );
             }
             return true;
         }
@@ -265,7 +240,7 @@ namespace tinydircpp {
                 throw;
             }
             if ( CreateSymbolicLinkW( new_symlink.c_str(), to.c_str(), 0 ) == 0 ) {
-                FSTHROW_DPATH( std::errc::no_link, to, new_symlink );
+                FSTHROW_MANUAL_DPATH( fs::filesystem_error_codes::no_link, to, new_symlink );
             }
         }
 
@@ -331,7 +306,7 @@ namespace tinydircpp {
 
         bool is_other( path const & p )
         {
-            return is_other( status( p  ));
+            return is_other( status( p ) );
         }
 
         bool is_other( path const & p, std::error_code & ec ) noexcept
@@ -420,8 +395,7 @@ namespace tinydircpp {
                 }
                 FindClose( symlink_handle );
                 return file_status{ file_type::unknown };
-            }
-            else if ( file_attrib & FILE_ATTRIBUTE_DIRECTORY ) {
+            } else if ( file_attrib & FILE_ATTRIBUTE_DIRECTORY ) {
                 return file_status{ file_type::directory };
             }
             return file_status{ file_type::regular };
@@ -444,12 +418,11 @@ namespace tinydircpp {
 
         path temporary_directory_path()
         {
-            TCHAR temp_path[ TINYDIR_PATH_MAX + 2 ]{};
-            DWORD path_length = GetTempPathW( TINYDIR_PATH_MAX, ( LPTSTR ) temp_path );
+            wchar_t temp_path[ TINYDIR_PATH_MAX + 2 ]{};
+            DWORD path_length = GetTempPathW( TINYDIR_PATH_MAX, temp_path );
             if ( path_length == 0 ) {
                 FSTHROW( std::errc::filename_too_long, {} );
-            }
-            else if ( path_length > TINYDIR_PATH_MAX ) { // rare, but this is my fault, didn't allocate enough space
+            } else if ( path_length > TINYDIR_PATH_MAX ) { // rare, but this is my fault, didn't allocate enough space
                 std::string new_path( path_length, ' ' );
                 path_length = GetTempPathA( path_length, ( LPSTR ) &new_path[ 0 ] );
                 return path{ new_path };
@@ -464,7 +437,7 @@ namespace tinydircpp {
 
         bool operator==( path const & a, path const & b )
         {
-            return abspath( a ).wstring() == abspath( b ).wstring();
+            return a.native() == b.native() || fs::equivalent( a, b );
         }
 
         void copy_symlink( path const & existing_symlink, path const & new_symlink )
@@ -492,7 +465,7 @@ namespace tinydircpp {
                 FSTHROW( std::errc::no_such_file_or_directory, p );
                 break;
             case ERROR_CANCELLED:
-                FSTHROW( std::errc::operation_canceled, p );
+                FSTHROW_MANUAL( fs::filesystem_error_codes::operation_cancelled, p );
                 break;
             default:
                 FSTHROW_MANUAL( fs::filesystem_error_codes::unknown_io_error, p );
@@ -522,10 +495,10 @@ namespace tinydircpp {
 
         file_time_type last_write_time( path const & p )
         {
-            TCHAR const *fp_path = p.c_str();
+            wchar_t const *fp_path = p.c_str();
             WIN32_FILE_ATTRIBUTE_DATA file_data{};
             if ( GetFileAttributesExW( fp_path, GetFileExInfoStandard, &file_data ) == 0 ) {
-                FSTHROW_MANUAL( fs::filesystem_error_codes::could_not_obtain_time , p );
+                FSTHROW_MANUAL( fs::filesystem_error_codes::could_not_obtain_time, p );
             }
             return fs::details::Win32FiletimeToChronoTime( file_data.ftLastWriteTime );
         }
@@ -642,9 +615,9 @@ namespace tinydircpp {
             if ( !is_symlink( p ) ) return path{};
 
             details::smart_handle h{ CreateFileW( p.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING,
-                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr ) };
+                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT , nullptr ) };
             if ( !h ) {
-                FSTHROW_MANUAL( fs::filesystem_error_codes::handle_not_opened ,p );
+                FSTHROW_MANUAL( fs::filesystem_error_codes::handle_not_opened, p );
             }
             DWORD returned_data_size = 0;
 
@@ -656,9 +629,9 @@ namespace tinydircpp {
                 &returned_data_size, nullptr ) == 0 ) {
                 FSTHROW_MANUAL( fs::filesystem_error_codes::unknown_io_error, p );
             }
-            std::wstring target_name{ static_cast< TCHAR* >( ai.reparse_buffer.SymbolicLinkReparseBuffer.PathBuffer )
+            std::wstring target_name{ static_cast< wchar_t* >( ai.reparse_buffer.SymbolicLinkReparseBuffer.PathBuffer )
                 + ai.reparse_buffer.SymbolicLinkReparseBuffer.PrintNameOffset / 2,
-                static_cast< TCHAR* >( ai.reparse_buffer.SymbolicLinkReparseBuffer.PathBuffer )
+                static_cast< wchar_t* >( ai.reparse_buffer.SymbolicLinkReparseBuffer.PathBuffer )
                 + ai.reparse_buffer.SymbolicLinkReparseBuffer.PrintNameOffset / 2
                 + ai.reparse_buffer.SymbolicLinkReparseBuffer.PrintNameLength / 2 };
             return path{ target_name };
@@ -678,7 +651,7 @@ namespace tinydircpp {
                 FSTHROW_MANUAL( fs::filesystem_error_codes::handle_not_opened, p );
             }
             if ( SetFilePointer( file_handle, ( LONG ) new_size, nullptr, FILE_BEGIN ) == INVALID_SET_FILE_POINTER ) {
-                FSTHROW_MANUAL( fs::filesystem_error_codes::invalid_set_file_pointer ,p );
+                FSTHROW_MANUAL( fs::filesystem_error_codes::invalid_set_file_pointer, p );
             }
         }
 
@@ -689,16 +662,16 @@ namespace tinydircpp {
 
         space_info space( path const & p )
         {
-            TCHAR const *directory_name = p.c_str();
-            details::smart_handle disk_handle{ CreateFileW( directory_name, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, 
+            wchar_t const *directory_name = p.c_str();
+            details::smart_handle disk_handle{ CreateFileW( directory_name, 0, FILE_SHARE_READ | FILE_SHARE_WRITE,
                 nullptr, OPEN_EXISTING, 0, nullptr ) };
             if ( !disk_handle ) {
                 FSTHROW_MANUAL( fs::filesystem_error_codes::handle_not_opened, p );
             }
             ULARGE_INTEGER free_bytes_available_to_caller{}, total_bytes{}, total_free_bytes{};
             if ( GetDiskFreeSpaceExW( directory_name, &free_bytes_available_to_caller,
-                &total_bytes, &total_free_bytes ) == 0 ){
-                FSTHROW_MANUAL( fs::filesystem_error_codes::could_not_obtain_size , p );
+                &total_bytes, &total_free_bytes ) == 0 ) {
+                FSTHROW_MANUAL( fs::filesystem_error_codes::could_not_obtain_size, p );
             }
             fs::space_info disk_space_info{};
             disk_space_info.free = total_free_bytes.QuadPart;
@@ -742,9 +715,9 @@ namespace tinydircpp {
             if ( !fs::status_known( status_ ) ) {
                 if ( fs::status_known( symlink_status_ ) && !fs::is_symlink( symlink_status_ ) ) {
                     status_ = symlink_status_;
-                }
-                else {
-                    status_ = fs::status( path_ );
+                } else {
+                    std::error_code ec{};
+                    status_ = fs::status( path_, ec );
                 }
             }
             return status_;
@@ -757,37 +730,107 @@ namespace tinydircpp {
             }
             return symlink_status_;
         }
-        bool directory_entry::operator<( directory_entry const & rhs )
+        bool directory_entry::operator<( directory_entry const & rhs ) const
         {
             return path_ < rhs.path_;
         }
 
-        bool directory_entry::operator<=( directory_entry const & rhs )
+        bool directory_entry::operator<=( directory_entry const & rhs ) const
         {
-            return path_ <= rhs.path_;
+            return ( *this == rhs ) || path_ < rhs.path_;
         }
 
-        bool directory_entry::operator==( directory_entry const & rhs )
+        bool directory_entry::operator==( directory_entry const & rhs ) const
         {
             return path_ == rhs.path_;
         }
 
-        bool directory_entry::operator!=( directory_entry const & rhs )
+        bool directory_entry::operator!=( directory_entry const & rhs ) const
         {
             return !( *this == rhs );
         }
 
-        bool directory_entry::operator>( directory_entry const & rhs )
+        bool directory_entry::operator>( directory_entry const & rhs ) const
         {
             return path_ > rhs.path_;
         }
 
-        bool directory_entry::operator>=( directory_entry const &rhs )
+        bool directory_entry::operator>=( directory_entry const &rhs ) const
         {
-            return path_ >= rhs.path_;
+            return !( *this < rhs );
         }
 
+        directory_iterator::directory_iterator( path const & p ) noexcept : full_path{ p }, entry{},
+            search_handle{ INVALID_HANDLE_VALUE }
+        {
+            WIN32_FIND_DATAW find_data{};
+            if ( full_path.native().back() != L'*' ) {
+                search_handle = FindFirstFileW( ( full_path / path{ "\\*" } ).c_str(), &find_data );
+            } else {
+                search_handle = FindFirstFileW( full_path.c_str(), &find_data );
+            }
+            if ( search_handle != INVALID_HANDLE_VALUE ) {
+                while ( ( std::wcscmp( find_data.cFileName, L"." ) == 0
+                    || std::wcscmp( find_data.cFileName, L".." ) == 0 )
+                    && FindNextFileW( search_handle, &find_data ) != 0 );
+                entry.assign( full_path / path{ find_data.cFileName } );
+            }
+        }
+        directory_entry const & directory_iterator::operator*() const
+        {
+            return entry;
+        }
 
+        // directory_iterator must satisfy the requirements for input iterator
+        bool directory_iterator::operator==( directory_iterator const & iter ) const
+        {
+            return ( search_handle == iter.search_handle ) && ( entry == iter.entry );
+        }
+
+        bool directory_iterator::operator != ( directory_iterator const & iter ) const
+        {
+            return !( *this == iter );
+        }
+
+        directory_iterator& directory_iterator::operator++()
+        {
+            if ( search_handle != INVALID_HANDLE_VALUE ) {
+                WIN32_FIND_DATAW find_data{};
+                if ( FindNextFileW( search_handle, &find_data ) != 0 ) {
+                    while ( ( std::wcscmp( find_data.cFileName, L"." ) == 0
+                        || std::wcscmp( find_data.cFileName, L".." ) == 0 )
+                        && FindNextFileW( search_handle, &find_data ) != 0 );
+                    entry.assign( full_path / path{ find_data.cFileName } );
+                } else {
+                    FindClose( search_handle );
+                    search_handle = INVALID_HANDLE_VALUE;
+                    entry.assign( path{} );
+                }
+            } else {
+                entry = path{};
+            }
+            return *this;
+        }
+
+        directory_iterator& directory_iterator::begin() noexcept
+        {
+            return *this;
+        }
+
+        directory_iterator directory_iterator::end() noexcept
+        {
+            return directory_iterator{};
+        }
+
+        directory_iterator const & directory_iterator::cbegin() const
+        {
+            return *this;
+        }
+
+        directory_iterator const directory_iterator::cend() const
+        {
+            return directory_iterator{};
+        }
     }
 }
 

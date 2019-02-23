@@ -35,12 +35,23 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define _UNICODE
 #endif // !_UNICODE
 
+#include <list>
+#include <deque>
+
+namespace std
+{
+    template<>
+    struct less<tinydircpp::fs::path> {
+        bool operator()( tinydircpp::fs::path const &a, tinydircpp::fs::path const &b ) const
+        {
+            return a.native() < b.native();
+        }
+    };
+}
 TEST_CASE( "Testing tinydircpp::fs free functions", "Success and failures" )
 {
     namespace fs = tinydircpp::fs;
-    using fs::status;
     using fs::path;
-    using fs::file_type;
 
     std::error_code ec{};
 
@@ -51,7 +62,8 @@ TEST_CASE( "Testing tinydircpp::fs free functions", "Success and failures" )
         the_this = path{ u"." },
         rel_dir_path = path{ U"..\\Debug" };
 
-    SECTION( "Testing fs::basename" ) {
+    SECTION( "Testing fs::basename" )
+    {
         auto const result = fs::basename( path_1 );
         REQUIRE( result.string() == std::string{ "Users" } );
         REQUIRE( fs::basename( symlink_path ).native() == L"CC" );
@@ -60,33 +72,62 @@ TEST_CASE( "Testing tinydircpp::fs free functions", "Success and failures" )
         REQUIRE( fs::basename( path( "." ) ).native() != L".." );
         REQUIRE( fs::basename( the_this ).native() == L"." );
     }
-    SECTION( "Testing fs::absolute && fs::abspath" ) {
+    SECTION( "Testing fs::absolute && fs::abspath" )
+    {
         REQUIRE( fs::abspath( path{ "." } ).native() != std::wstring{ L"C:\\Users" } );
         REQUIRE( fs::abspath( path{ ".." } ).u16string() != system_file_path.u16string() );
     }
 
-    SECTION( "Testing fs::common_path" ) {
-        std::vector<path> const paths{ path_1, symlink_path, cpp_file_path, system_file_path, the_this };
+    SECTION( "Testing fs::common_path" )
+    {
+        std::set<path> const paths{ path_1, symlink_path, cpp_file_path, system_file_path, the_this };
 
-        auto const common_p = fs::common_path( paths );
+        auto const common_p = fs::common_path( paths.cbegin(), paths.cend() );
         REQUIRE( common_p.wstring() == L"C:\\" );
         REQUIRE( common_p.native() == L"C" );
     }
-    SECTION( "Testing fs::common_prefix" ) {
-        std::vector<path> paths{ path_1, symlink_path, cpp_file_path, the_this };
-        auto const common_pref = fs::common_prefix( paths );
+    SECTION( "Testing fs::common_prefix" )
+    {
+        std::list<path> paths{ path_1, symlink_path, cpp_file_path, the_this };
+        auto const common_pref = fs::common_prefix( paths.begin(), paths.end() );
         REQUIRE( common_pref.wstring() == L"C:\\" );
         REQUIRE( common_pref.native() == L"C" );
     }
-    SECTION( "testing is_absolute" ) {
+    SECTION( "testing is_absolute" )
+    {
         REQUIRE( fs::is_abs( the_this ) );
         REQUIRE( fs::is_abs( rel_dir_path ) );
         REQUIRE( !fs::is_abs( cpp_file_path ) );
     }
-    SECTION( "testing read_symlink and abspath" ) {
+    SECTION( "testing read_symlink and abspath" )
+    {
         path const xpath{ symlink_path };
         auto const p = fs::read_symlink( xpath );
         REQUIRE( fs::abspath( p ).native() == L"." );
         REQUIRE( fs::is_abs( p ) );
+    }
+    SECTION( "iterating directory_entry" )
+    {
+        std::deque<fs::directory_entry> paths( fs::directory_iterator{ path_1 }, fs::directory_iterator{} );
+        std::cout << paths.size() << " entries.\n";
+        for ( auto const & c : paths ) {
+            std::wcout << c.path().c_str();
+            switch ( c.status().type() ) {
+            case fs::file_type::directory:
+                std::cout << " is a directory\n";
+                break;
+            case fs::file_type::regular:
+                std::cout << " is a regular file\n";
+                break;
+            case fs::file_type::symlink:
+                std::cout << " is a symbolic link targeting: " << fs::read_symlink( c.path() ).c_str() << "\n";
+                break;
+            case fs::file_type::unknown:
+                std::cout << "'s type is unknown\n";
+                break;
+            default:
+                std::cout << " is indeterminate\n";
+            }
+        }
     }
 }
